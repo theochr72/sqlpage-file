@@ -180,8 +180,7 @@ def is_already_processed(pg: PgUtil, filename: str, schema: str) -> dict | None:
          WHERE original_filename = %s OR renamed_filename = %s
          LIMIT 1;
     """
-    result = db_fetch(pg, statement=statement, data=[filename, filename])
-    return result[0] if result else None
+    return db_fetch_one(pg, statement=statement, data=[filename, filename])
 
 
 def is_manually_edited(pg: PgUtil, invoice_number: str, schema: str) -> bool:
@@ -191,8 +190,7 @@ def is_manually_edited(pg: PgUtil, invoice_number: str, schema: str) -> bool:
          WHERE invoice_number = %s AND manually_edited_at IS NOT NULL
          LIMIT 1;
     """
-    result = db_fetch(pg, statement=statement, data=[invoice_number])
-    return bool(result)
+    return db_fetch_one(pg, statement=statement, data=[invoice_number]) is not None
 
 
 def mark_upload_processed(pg: PgUtil, filename: str, schema: str) -> None:
@@ -202,7 +200,7 @@ def mark_upload_processed(pg: PgUtil, filename: str, schema: str) -> None:
            SET processed = TRUE
          WHERE filename = %s AND processed = FALSE;
     """
-    pg.execute(statement=statement, data=[filename])
+    pg.query_without_return(statement=statement, data=[filename])
 
 
 # ── Extraction ─────────────────────────────────────────────────────────────────
@@ -249,21 +247,15 @@ def db_connection(database_configuration: dict) -> PgUtil:
     return pg_db
 
 
-def db_fetch(pg: PgUtil, statement: str, data: list) -> list[dict]:
-    """Execute a SELECT and return rows as list of dicts.
-    Wraps PgUtil.execute() + cursor.fetchall() for compatibility."""
-    try:
-        pg.execute(statement=statement, data=data)
-        if pg.cursor.description:
-            columns = [desc[0] for desc in pg.cursor.description]
-            return [dict(zip(columns, row)) for row in pg.cursor.fetchall()]
-    except Exception:
-        logger.debug("db_fetch failed, trying pg.fetch()", exc_info=True)
-        try:
-            return pg.fetch(statement=statement, data=data)
-        except AttributeError:
-            pass
-    return []
+def db_fetch(pg: PgUtil, statement: str, data: list) -> list:
+    """Execute a SELECT and return rows as list."""
+    result = pg.query(statement=statement, data=data)
+    return result if result else []
+
+
+def db_fetch_one(pg: PgUtil, statement: str, data: list):
+    """Execute a SELECT and return a single row or None."""
+    return pg.query_get_one(statement=statement, data=data)
 
 
 def insert_invoice(pg: PgUtil, data: dict, schema: str, dryrun: bool,
@@ -362,15 +354,15 @@ def insert_invoice(pg: PgUtil, data: dict, schema: str, dryrun: bool,
         overall_confidence,
     ]
 
-    logger.debug("Invoice INSERT:\n%s", pg.mogrify(statement=statement, data=invoice_data))
+    logger.debug("Invoice INSERT:\n%s", pg.show_prepared_sql(statement=statement, data=invoice_data))
     if not dryrun:
-        pg.execute(statement=statement, data=invoice_data)
+        pg.query_without_return(statement=statement, data=invoice_data)
 
     # ── 2. Lignes de facture ──────────────────────────────────────────────────
     # Supprime les anciennes lignes pour gérer le re-processing
     delete_stmt = f"DELETE FROM {schema}.invoice_item WHERE invoice_number = %s;"
     if not dryrun:
-        pg.execute(statement=delete_stmt, data=[invoice_number])
+        pg.query_without_return(statement=delete_stmt, data=[invoice_number])
 
     for idx, item in enumerate(data.get("items", []), start=1):
         statement = f"""
@@ -394,9 +386,9 @@ def insert_invoice(pg: PgUtil, data: dict, schema: str, dryrun: bool,
             conf(item.get("total")),
         ]
 
-        logger.debug("Item INSERT:\n%s", pg.mogrify(statement=statement, data=item_data))
+        logger.debug("Item INSERT:\n%s", pg.show_prepared_sql(statement=statement, data=item_data))
         if not dryrun:
-            pg.execute(statement=statement, data=item_data)
+            pg.query_without_return(statement=statement, data=item_data)
 
     if dryrun:
         logger.info("[DRYRUN] Facture %s — aucune donnée écrite.", invoice_number)

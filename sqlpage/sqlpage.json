@@ -1,4 +1,0 @@
-{
-    "database_url": "$DATABASE_URL",
-    "port": 8080
-}
