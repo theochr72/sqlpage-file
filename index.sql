@@ -1,16 +1,6 @@
 -- index.sql — Dashboard
 
-SELECT 'shell' AS component,
-       'InvoiceAI' AS title,
-       'file-invoice' AS icon,
-       TRUE AS sidebar,
-       'Dashboard' AS menu_item, '/' AS link,
-       'Invoices' AS menu_item, '/invoices.sql' AS link,
-       'Fiscal' AS menu_item, '/fiscal.sql' AS link,
-       'Properties' AS menu_item, '/properties.sql' AS link,
-       'Upload' AS menu_item, '/upload.sql' AS link,
-       'dark' AS theme,
-       'Inter' AS font;
+SELECT 'dynamic' AS component, sqlpage.run_sql('shell.sql') AS properties;
 
 -- ── Hero ─────────────────────────────────────────────────────────────────────
 

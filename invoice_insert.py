@@ -200,7 +200,7 @@ def mark_upload_processed(pg: PgUtil, filename: str, schema: str) -> None:
            SET processed = TRUE
          WHERE filename = %s AND processed = FALSE;
     """
-    pg.query_without_return(statement=statement, data=[filename])
+    pg.execute(statement=statement, data=[filename])
 
 
 # ── Extraction ─────────────────────────────────────────────────────────────────
@@ -255,7 +255,7 @@ def db_fetch(pg: PgUtil, statement: str, data: list) -> list:
 
 def db_fetch_one(pg: PgUtil, statement: str, data: list):
     """Execute a SELECT and return a single row or None."""
-    return pg.query_get_one(statement=statement, data=data)
+    return pg.execute_fetch_one(statement=statement, data=data)
 
 
 def insert_invoice(pg: PgUtil, data: dict, schema: str, dryrun: bool,
@@ -356,13 +356,13 @@ def insert_invoice(pg: PgUtil, data: dict, schema: str, dryrun: bool,
 
     logger.debug("Invoice INSERT:\n%s", pg.show_prepared_sql(statement=statement, data=invoice_data))
     if not dryrun:
-        pg.query_without_return(statement=statement, data=invoice_data)
+        pg.execute(statement=statement, data=invoice_data)
 
     # ── 2. Lignes de facture ──────────────────────────────────────────────────
     # Supprime les anciennes lignes pour gérer le re-processing
     delete_stmt = f"DELETE FROM {schema}.invoice_item WHERE invoice_number = %s;"
     if not dryrun:
-        pg.query_without_return(statement=delete_stmt, data=[invoice_number])
+        pg.execute(statement=delete_stmt, data=[invoice_number])
 
     for idx, item in enumerate(data.get("items", []), start=1):
         statement = f"""
@@ -388,7 +388,7 @@ def insert_invoice(pg: PgUtil, data: dict, schema: str, dryrun: bool,
 
         logger.debug("Item INSERT:\n%s", pg.show_prepared_sql(statement=statement, data=item_data))
         if not dryrun:
-            pg.query_without_return(statement=statement, data=item_data)
+            pg.execute(statement=statement, data=item_data)
 
     if dryrun:
         logger.info("[DRYRUN] Facture %s — aucune donnée écrite.", invoice_number)
