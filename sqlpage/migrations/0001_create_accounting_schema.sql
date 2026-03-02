@@ -1,11 +1,10 @@
--- schema.sql — DDL for invoice management system
--- Usage: psql -U root -d sqlpage -f schema.sql
+-- 0001_create_accounting_schema.sql
 
 CREATE SCHEMA IF NOT EXISTS accounting;
 
 CREATE TABLE IF NOT EXISTS accounting.invoice (
     id                          SERIAL PRIMARY KEY,
-    invoice_number              TEXT NOT NULL UNIQUE,
+    invoice_number              TEXT NOT NULL UNIQUE CHECK (invoice_number != ''),
     document_type               TEXT,
     issue_date                  DATE,
     due_date                    DATE,
@@ -35,7 +34,7 @@ CREATE TABLE IF NOT EXISTS accounting.invoice (
     renamed_filename            TEXT,
     raw_json                    JSONB,
     processed_at                TIMESTAMPTZ NOT NULL DEFAULT now(),
-    overall_confidence          REAL,
+    overall_confidence          REAL CHECK (overall_confidence IS NULL OR (overall_confidence >= 0 AND overall_confidence <= 1)),
     status                      TEXT NOT NULL DEFAULT 'pending_review'
                                 CHECK (status IN ('pending_review', 'validated', 'rejected'))
 );

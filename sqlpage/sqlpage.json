@@ -1,4 +1,4 @@
 {
-    "database_url": "postgresql://root:Password123!@localhost/sqlpage",
+    "database_url": "$DATABASE_URL",
     "port": 8080
 }

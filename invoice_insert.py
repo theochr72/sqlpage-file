@@ -168,6 +168,43 @@ def resolve_paths(patterns: list[str]) -> list[Path]:
     return sorted(set(paths))
 
 
+# ── Détection de doublons ─────────────────────────────────────────────────────
+
+
+def is_already_processed(pg: PgUtil, filename: str, schema: str) -> dict | None:
+    """Vérifie si un fichier a déjà été traité (par nom original ou renommé).
+    Retourne la ligne existante ou None."""
+    statement = f"""
+        SELECT id, invoice_number, status, manually_edited_at
+          FROM {schema}.invoice
+         WHERE original_filename = %s OR renamed_filename = %s
+         LIMIT 1;
+    """
+    result = db_fetch(pg, statement=statement, data=[filename, filename])
+    return result[0] if result else None
+
+
+def is_manually_edited(pg: PgUtil, invoice_number: str, schema: str) -> bool:
+    """Vérifie si une facture a été manuellement éditée."""
+    statement = f"""
+        SELECT 1 FROM {schema}.invoice
+         WHERE invoice_number = %s AND manually_edited_at IS NOT NULL
+         LIMIT 1;
+    """
+    result = db_fetch(pg, statement=statement, data=[invoice_number])
+    return bool(result)
+
+
+def mark_upload_processed(pg: PgUtil, filename: str, schema: str) -> None:
+    """Marque un fichier uploadé comme traité dans pending_upload."""
+    statement = f"""
+        UPDATE {schema}.pending_upload
+           SET processed = TRUE
+         WHERE filename = %s AND processed = FALSE;
+    """
+    pg.execute(statement=statement, data=[filename])
+
+
 # ── Extraction ─────────────────────────────────────────────────────────────────
 
 
@@ -203,13 +240,30 @@ def db_connection(database_configuration: dict) -> PgUtil:
     try:
         pg_db = PgUtil(database_configuration)
         pg_db.connect()
-        return pg_db  # noqa: TRY300
     except Exception as err:
-        logger.error(f"Could not connect to db database, error was: {err}")  # noqa: TRY400
+        logger.error("Could not connect to database: %s", err)
         sys.exit(1)
-    except not pg_db.is_connected():  # noqa: B030
-        logger.exception("Could not connect to db database")
+    if not pg_db.is_connected():
+        logger.error("Could not connect to database (connection check failed)")
         sys.exit(1)
+    return pg_db
+
+
+def db_fetch(pg: PgUtil, statement: str, data: list) -> list[dict]:
+    """Execute a SELECT and return rows as list of dicts.
+    Wraps PgUtil.execute() + cursor.fetchall() for compatibility."""
+    try:
+        pg.execute(statement=statement, data=data)
+        if pg.cursor.description:
+            columns = [desc[0] for desc in pg.cursor.description]
+            return [dict(zip(columns, row)) for row in pg.cursor.fetchall()]
+    except Exception:
+        logger.debug("db_fetch failed, trying pg.fetch()", exc_info=True)
+        try:
+            return pg.fetch(statement=statement, data=data)
+        except AttributeError:
+            pass
+    return []
 
 
 def insert_invoice(pg: PgUtil, data: dict, schema: str, dryrun: bool,
@@ -218,6 +272,11 @@ def insert_invoice(pg: PgUtil, data: dict, schema: str, dryrun: bool,
     customer = data.get("customer", {})
 
     invoice_number   = val(data.get("invoice_number"))
+    if not invoice_number:
+        logger.error("Missing invoice_number in extracted data for %s — skipping",
+                     original_filename)
+        return
+
     document_type    = val(data.get("document_type"))
     issue_date       = parse_fr_date(val(data.get("issue_date")))
     due_date         = parse_fr_date(val(data.get("due_date")))
@@ -279,7 +338,10 @@ def insert_invoice(pg: PgUtil, data: dict, schema: str, dryrun: bool,
             renamed_filename   = EXCLUDED.renamed_filename,
             raw_json           = EXCLUDED.raw_json,
             overall_confidence = EXCLUDED.overall_confidence,
-            processed_at       = now();
+            manually_edited_at = NULL,
+            manually_edited_fields = NULL,
+            processed_at       = now()
+        WHERE {schema}.invoice.manually_edited_at IS NULL;
     """
     invoice_data = [
         invoice_number,   document_type,
@@ -383,6 +445,8 @@ def main() -> None:
                         help="Schéma PostgreSQL cible (défaut: accounting)")
     parser.add_argument("--no-rename", action="store_true",
                         help="Ne pas renommer les fichiers PDF")
+    parser.add_argument("--force", action="store_true",
+                        help="Re-traite même si déjà traité ou manuellement édité")
     parser.add_argument("--dryrun", action="store_true",
                         help="Affiche les requêtes sans les exécuter")
     parser.add_argument("-v", "--verbose", action="store_true",
@@ -408,9 +472,33 @@ def main() -> None:
     pg = db_connection(config["invoice_db"])
 
     errors = 0
+    skipped = 0
     for idx, pdf_path in enumerate(pdf_paths, start=1):
         logger.info("Processing %s (%d/%d)", pdf_path.name, idx, len(pdf_paths))
 
+        # ── Détection de doublons ────────────────────────────────────────────
+        if not args.force and not args.dryrun:
+            existing = is_already_processed(pg, pdf_path.name, args.schema)
+            if existing:
+                inv_num = existing.get("invoice_number", "?")
+                status = existing.get("status", "?")
+                edited = existing.get("manually_edited_at")
+                if edited:
+                    logger.warning(
+                        "SKIP %s — already processed as %s (status: %s, "
+                        "manually edited at %s). Use --force to re-process.",
+                        pdf_path.name, inv_num, status, edited,
+                    )
+                else:
+                    logger.warning(
+                        "SKIP %s — already processed as %s (status: %s). "
+                        "Use --force to re-process.",
+                        pdf_path.name, inv_num, status,
+                    )
+                skipped += 1
+                continue
+
+        # ── Extraction ───────────────────────────────────────────────────────
         try:
             invoice_data = run_extractor(api_key=args.api_key, pdf_path=str(pdf_path))
         except ExtractionError as e:
@@ -421,6 +509,19 @@ def main() -> None:
         logger.debug("Payload extrait:\n%s",
                       json.dumps(invoice_data, indent=2, ensure_ascii=False))
 
+        # ── Protection des éditions manuelles ────────────────────────────────
+        invoice_number = val(invoice_data.get("invoice_number"))
+        if not args.force and not args.dryrun and invoice_number:
+            if is_manually_edited(pg, invoice_number, args.schema):
+                logger.warning(
+                    "SKIP %s — invoice %s was manually edited. "
+                    "Use --force to overwrite.",
+                    pdf_path.name, invoice_number,
+                )
+                skipped += 1
+                continue
+
+        # ── Renommage ────────────────────────────────────────────────────────
         original_filename = pdf_path.name
 
         if args.no_rename or args.dryrun:
@@ -434,16 +535,28 @@ def main() -> None:
             )
             renamed_filename = renamed_path.name
 
+        # ── Insertion ────────────────────────────────────────────────────────
         insert_invoice(
             pg=pg, data=invoice_data, schema=args.schema, dryrun=args.dryrun,
             original_filename=original_filename,
             renamed_filename=renamed_filename,
         )
 
+        # ── Marquer le fichier uploadé comme traité ──────────────────────────
+        if not args.dryrun:
+            mark_upload_processed(pg, original_filename, args.schema)
+
+    # ── Résumé ───────────────────────────────────────────────────────────────
+    total = len(pdf_paths)
+    processed = total - errors - skipped
+    parts = []
+    if processed:
+        parts.append(f"{processed} processed")
+    if skipped:
+        parts.append(f"{skipped} skipped")
     if errors:
-        logger.warning("%d file(s) failed out of %d", errors, len(pdf_paths))
-    else:
-        logger.info("All %d file(s) processed successfully", len(pdf_paths))
+        parts.append(f"{errors} failed")
+    logger.info("Done: %s (out of %d file(s))", ", ".join(parts), total)
 
 
 if __name__ == "__main__":
