@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(invoice-extractor:*)",
+      "Bash(pip show:*)",
+      "WebSearch",
+      "WebFetch(domain:www.npmjs.com)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(gh api:*)",
+      "Bash(python3:*)"
+    ]
+  }
+}
