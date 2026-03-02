@@ -249,7 +249,7 @@ def db_connection(database_configuration: dict) -> PgUtil:
 
 def db_fetch(pg: PgUtil, statement: str, data: list) -> list:
     """Execute a SELECT and return rows as list."""
-    result = pg.query(statement=statement, data=data)
+    result = pg.execute_fetch_all(statement=statement, data=data)
     return result if result else []
 
 
@@ -354,7 +354,7 @@ def insert_invoice(pg: PgUtil, data: dict, schema: str, dryrun: bool,
         overall_confidence,
     ]
 
-    logger.debug("Invoice INSERT:\n%s", pg.show_prepared_sql(statement=statement, data=invoice_data))
+    logger.debug("Invoice INSERT:\n%s", pg.mogrify(statement=statement, data=invoice_data))
     if not dryrun:
         pg.execute(statement=statement, data=invoice_data)
 
@@ -386,7 +386,7 @@ def insert_invoice(pg: PgUtil, data: dict, schema: str, dryrun: bool,
             conf(item.get("total")),
         ]
 
-        logger.debug("Item INSERT:\n%s", pg.show_prepared_sql(statement=statement, data=item_data))
+        logger.debug("Item INSERT:\n%s", pg.mogrify(statement=statement, data=item_data))
         if not dryrun:
             pg.execute(statement=statement, data=item_data)
 

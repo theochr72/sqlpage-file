@@ -1,5 +1,9 @@
 -- save_invoice.sql — Sauvegarde les modifications manuelles d'une facture
 
+-- Guard: no id → back to list
+SELECT 'redirect' AS component, 'invoices.sql' AS link
+ WHERE $id IS NULL OR $id = '';
+
 UPDATE accounting.invoice
    SET invoice_number   = $invoice_number,
        document_type    = NULLIF($document_type, ''),

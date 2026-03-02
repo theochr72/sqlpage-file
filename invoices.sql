@@ -38,8 +38,10 @@ SELECT 'form' AS component,
        'search' AS validate_icon,
        'azure' AS validate_color;
 
-SELECT 'text' AS type, 'supplier' AS name, 'Supplier' AS label,
-       $supplier AS value, 'building' AS prefix_icon, 3 AS width;
+SELECT 'select' AS type, 'supplier' AS name, 'Supplier' AS label,
+       $supplier AS value, 3 AS width, TRUE AS dropdown, TRUE AS searchable, TRUE AS empty_option,
+       (SELECT json_agg(json_build_object('label', s.supplier_name, 'value', s.supplier_name) ORDER BY s.supplier_name)
+          FROM (SELECT DISTINCT supplier_name FROM accounting.invoice WHERE supplier_name IS NOT NULL) s)::TEXT AS options;
 
 SELECT 'select' AS type, 'property' AS name, 'Property' AS label,
        $property AS value, 3 AS width, TRUE AS dropdown, TRUE AS empty_option,
@@ -61,7 +63,7 @@ SELECT 'Invoices' AS title,
        'file-invoice' AS icon
   FROM accounting.invoice i
  WHERE ($status IS NULL OR $status = '' OR i.status = $status)
-   AND ($supplier IS NULL OR $supplier = '' OR i.supplier_name ILIKE '%' || $supplier || '%')
+   AND ($supplier IS NULL OR $supplier = '' OR i.supplier_name = $supplier)
    AND ($date_from IS NULL OR $date_from = '' OR i.issue_date >= $date_from::DATE)
    AND ($date_to IS NULL OR $date_to = '' OR i.issue_date <= $date_to::DATE)
    AND ($property IS NULL OR $property = '' OR i.property_id = $property::INT);
@@ -72,7 +74,7 @@ SELECT 'Total Spend' AS title,
        'green' AS color
   FROM accounting.invoice i
  WHERE ($status IS NULL OR $status = '' OR i.status = $status)
-   AND ($supplier IS NULL OR $supplier = '' OR i.supplier_name ILIKE '%' || $supplier || '%')
+   AND ($supplier IS NULL OR $supplier = '' OR i.supplier_name = $supplier)
    AND ($date_from IS NULL OR $date_from = '' OR i.issue_date >= $date_from::DATE)
    AND ($date_to IS NULL OR $date_to = '' OR i.issue_date <= $date_to::DATE)
    AND ($property IS NULL OR $property = '' OR i.property_id = $property::INT);
@@ -85,7 +87,7 @@ SELECT 'Avg Confidence' AS title,
             ELSE 'red' END AS color
   FROM accounting.invoice i
  WHERE ($status IS NULL OR $status = '' OR i.status = $status)
-   AND ($supplier IS NULL OR $supplier = '' OR i.supplier_name ILIKE '%' || $supplier || '%')
+   AND ($supplier IS NULL OR $supplier = '' OR i.supplier_name = $supplier)
    AND ($date_from IS NULL OR $date_from = '' OR i.issue_date >= $date_from::DATE)
    AND ($date_to IS NULL OR $date_to = '' OR i.issue_date <= $date_to::DATE)
    AND ($property IS NULL OR $property = '' OR i.property_id = $property::INT);
@@ -96,7 +98,7 @@ SELECT 'Suppliers' AS title,
        'cyan' AS color
   FROM accounting.invoice i
  WHERE ($status IS NULL OR $status = '' OR i.status = $status)
-   AND ($supplier IS NULL OR $supplier = '' OR i.supplier_name ILIKE '%' || $supplier || '%')
+   AND ($supplier IS NULL OR $supplier = '' OR i.supplier_name = $supplier)
    AND ($date_from IS NULL OR $date_from = '' OR i.issue_date >= $date_from::DATE)
    AND ($date_to IS NULL OR $date_to = '' OR i.issue_date <= $date_to::DATE)
    AND ($property IS NULL OR $property = '' OR i.property_id = $property::INT);
@@ -133,7 +135,7 @@ SELECT i.invoice_number AS "Invoice #",
   LEFT JOIN accounting.expense_category c ON c.code = i.category_code
   LEFT JOIN accounting.property p ON p.id = i.property_id
  WHERE ($status IS NULL OR $status = '' OR i.status = $status)
-   AND ($supplier IS NULL OR $supplier = '' OR i.supplier_name ILIKE '%' || $supplier || '%')
+   AND ($supplier IS NULL OR $supplier = '' OR i.supplier_name = $supplier)
    AND ($date_from IS NULL OR $date_from = '' OR i.issue_date >= $date_from::DATE)
    AND ($date_to IS NULL OR $date_to = '' OR i.issue_date <= $date_to::DATE)
    AND ($property IS NULL OR $property = '' OR i.property_id = $property::INT)

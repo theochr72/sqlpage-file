@@ -37,6 +37,12 @@ SELECT 'Edit' AS title,
        'edit_invoice.sql?id=' || $id AS link
   FROM accounting.invoice WHERE id = $id::INT;
 
+SELECT 'Review' AS title,
+       'cyan' AS color,
+       'eye-check' AS icon,
+       'review.sql?id=' || $id AS link
+  FROM accounting.invoice WHERE id = $id::INT AND status = 'pending_review';
+
 SELECT 'Validate' AS title,
        'green' AS color,
        'circle-check' AS icon,
