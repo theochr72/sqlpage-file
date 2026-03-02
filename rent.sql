@@ -1,21 +1,25 @@
--- rent.sql — Rent tracking grid (12 months × properties)
+-- rent.sql — Suivi des loyers (grille 12 mois x biens)
 
 SELECT 'dynamic' AS component, sqlpage.run_sql('shell.sql') AS properties;
 
-SELECT 'title' AS component, 'Rent Tracking' AS contents, 2 AS level;
+-- ── En-tete ─────────────────────────────────────────────────────────────────
 
--- ── Filters ─────────────────────────────────────────────────────────────────
+SELECT 'hero' AS component,
+       'Suivi des loyers' AS title,
+       'Visualisez l''etat des paiements mois par mois pour chaque bien. Les lignes en rouge signalent des loyers en retard : cliquez dessus pour enregistrer le paiement.' AS description;
+
+-- ── Filtres ─────────────────────────────────────────────────────────────────
 
 SET _year = COALESCE(NULLIF($year, ''), EXTRACT(YEAR FROM CURRENT_DATE)::TEXT);
 
 SELECT 'form' AS component,
        'GET' AS method,
        'rent.sql' AS action,
-       'Filter' AS validate,
+       'Filtrer' AS validate,
        'filter' AS validate_icon,
        'azure' AS validate_color;
 
-SELECT 'select' AS type, 'year' AS name, 'Year' AS label,
+SELECT 'select' AS type, 'year' AS name, 'Annee' AS label,
        $_year AS value, 4 AS width, TRUE AS dropdown,
        (SELECT json_agg(json_build_object('label', y::TEXT, 'value', y::TEXT) ORDER BY y DESC)
           FROM generate_series(
@@ -25,8 +29,9 @@ SELECT 'select' AS type, 'year' AS name, 'Year' AS label,
           ) AS y
        )::TEXT AS options;
 
-SELECT 'select' AS type, 'property' AS name, 'Property' AS label,
+SELECT 'select' AS type, 'property' AS name, 'Bien' AS label,
        $property AS value, 4 AS width, TRUE AS dropdown, TRUE AS empty_option,
+       'Filtrer sur un bien specifique, ou laissez vide pour tout voir.' AS description,
        (SELECT json_agg(json_build_object('label', p.name, 'value', p.id) ORDER BY p.name)
           FROM accounting.property p)::TEXT AS options;
 
@@ -34,10 +39,11 @@ SELECT 'select' AS type, 'property' AS name, 'Property' AS label,
 
 SELECT 'big_number' AS component, 4 AS columns;
 
--- Total expected YTD
-SELECT 'Expected YTD' AS title,
+-- Total attendu depuis janvier
+SELECT 'Attendu (cumul)' AS title,
        COALESCE(to_char(SUM(l.monthly_rent + l.charges), 'FM999G999D00'), '0') AS value,
-       '€' AS unit, 'cash' AS icon, 'azure' AS color
+       '€' AS unit, 'cash' AS icon, 'azure' AS color,
+       'Total des loyers+charges dus depuis janvier.' AS description
   FROM accounting.lease l
   CROSS JOIN generate_series(1, LEAST(
       CASE WHEN $_year::INT = EXTRACT(YEAR FROM CURRENT_DATE)::INT
@@ -47,17 +53,18 @@ SELECT 'Expected YTD' AS title,
    AND (l.end_date IS NULL OR l.end_date >= make_date($_year::INT, m.n, 1))
    AND ($property IS NULL OR $property = '' OR l.property_id = $property::INT);
 
--- Total received YTD
-SELECT 'Received YTD' AS title,
+-- Total recu
+SELECT 'Recu (cumul)' AS title,
        COALESCE(to_char(SUM(rp.amount), 'FM999G999D00'), '0') AS value,
-       '€' AS unit, 'circle-check' AS icon, 'green' AS color
+       '€' AS unit, 'circle-check' AS icon, 'green' AS color,
+       'Paiements effectivement enregistres.' AS description
   FROM accounting.rent_payment rp
   JOIN accounting.lease l ON l.id = rp.lease_id
  WHERE rp.period_year = $_year::INT
    AND ($property IS NULL OR $property = '' OR l.property_id = $property::INT);
 
--- Unpaid
-SELECT 'Unpaid' AS title,
+-- Impayes
+SELECT 'Impayes' AS title,
        COALESCE(to_char(
            (SELECT COALESCE(SUM(l2.monthly_rent + l2.charges), 0)
               FROM accounting.lease l2
@@ -70,6 +77,7 @@ SELECT 'Unpaid' AS title,
            - COALESCE(SUM(rp.amount), 0),
        'FM999G999D00'), '0') AS value,
        '€' AS unit, 'alert-triangle' AS icon,
+       'Difference entre attendu et recu.' AS description,
        CASE WHEN COALESCE(
            (SELECT COALESCE(SUM(l2.monthly_rent + l2.charges), 0)
               FROM accounting.lease l2
@@ -85,37 +93,41 @@ SELECT 'Unpaid' AS title,
  WHERE rp.period_year = $_year::INT
    AND ($property IS NULL OR $property = '' OR l.property_id = $property::INT);
 
--- Occupancy rate
-SELECT 'Occupancy' AS title,
+-- Taux d'occupation
+SELECT 'Occupation' AS title,
        COALESCE(ROUND(
            COUNT(DISTINCT l.property_id)::NUMERIC /
            NULLIF((SELECT COUNT(*) FROM accounting.property), 0) * 100
        )::TEXT || '%', '—') AS value,
-       'home-check' AS icon, 'cyan' AS color
+       'home-check' AS icon, 'cyan' AS color,
+       'Proportion de biens avec bail actif.' AS description
   FROM accounting.lease l
  WHERE l.start_date <= CURRENT_DATE
    AND (l.end_date IS NULL OR l.end_date >= CURRENT_DATE)
    AND ($property IS NULL OR $property = '' OR l.property_id = $property::INT);
 
--- ── Monthly grid per property ───────────────────────────────────────────────
+-- ── Grille mensuelle ────────────────────────────────────────────────────────
 
-SELECT 'title' AS component, 'Monthly Detail — ' || $_year AS contents, 3 AS level;
+SELECT 'divider' AS component, 'Detail mois par mois — ' || $_year AS contents, 3 AS size;
+
+SELECT 'text' AS component;
+SELECT 'Chaque ligne represente un mois de bail pour un bien donne. **Vert** = paye, **Rouge** = en retard (cliquez pour enregistrer), **Blanc** = futur.' AS contents_md;
 
 SELECT 'table' AS component,
        TRUE AS hover, TRUE AS striped_rows, TRUE AS striped_columns,
-       'Expected,Received,Status' AS align_center,
-       'No active leases for this period.' AS empty_description;
+       'Attendu,Recu,Statut' AS align_center,
+       'Aucun bail actif pour cette periode. Creez un bail depuis la page Baux.' AS empty_description;
 
-SELECT p.name AS "Property",
-       t.name AS "Tenant",
-       to_char(make_date($_year::INT, m.n, 1), 'Mon') AS "Month",
-       to_char(l.monthly_rent + l.charges, 'FM999G999D00') || ' €' AS "Expected",
-       COALESCE(to_char(rp.amount, 'FM999G999D00') || ' €', '—') AS "Received",
+SELECT p.name AS "Bien",
+       t.name AS "Locataire",
+       to_char(make_date($_year::INT, m.n, 1), 'TMMonth') AS "Mois",
+       to_char(l.monthly_rent + l.charges, 'FM999G999D00') || ' €' AS "Attendu",
+       COALESCE(to_char(rp.amount, 'FM999G999D00') || ' €', '—') AS "Recu",
        CASE
-           WHEN rp.id IS NOT NULL THEN 'Paid'
-           WHEN make_date($_year::INT, m.n, 1) > CURRENT_DATE THEN 'Future'
-           ELSE 'Late'
-       END AS "Status",
+           WHEN rp.id IS NOT NULL THEN 'Paye'
+           WHEN make_date($_year::INT, m.n, 1) > CURRENT_DATE THEN 'A venir'
+           ELSE 'En retard'
+       END AS "Statut",
        CASE
            WHEN rp.id IS NOT NULL THEN 'green'
            WHEN make_date($_year::INT, m.n, 1) > CURRENT_DATE THEN NULL

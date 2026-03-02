@@ -1,63 +1,85 @@
--- recurring.sql — Recurring expense templates
+-- recurring.sql — Charges recurrentes
 
 SELECT 'dynamic' AS component, sqlpage.run_sql('shell.sql') AS properties;
 
-SELECT 'title' AS component, 'Recurring Expenses' AS contents, 2 AS level;
+-- ── En-tete ─────────────────────────────────────────────────────────────────
 
--- ── Current period ──────────────────────────────────────────────────────────
+SELECT 'hero' AS component,
+       'Charges recurrentes' AS title,
+       'Definissez des modeles de depenses qui reviennent regulierement (assurance, charges de copro, taxe fonciere...). Chaque mois, generez automatiquement la facture correspondante en un clic.' AS description;
+
+-- ── Periode courante ────────────────────────────────────────────────────────
 
 SET _cur_month = EXTRACT(MONTH FROM CURRENT_DATE)::TEXT;
 SET _cur_year  = EXTRACT(YEAR FROM CURRENT_DATE)::TEXT;
 
--- ── Add template form ───────────────────────────────────────────────────────
+-- ── Formulaire d'ajout ──────────────────────────────────────────────────────
 
 SELECT 'form' AS component,
        'POST' AS method,
        'save_recurring.sql' AS action,
-       'Add Template' AS validate,
+       'Ajouter le modele' AS validate,
        'plus' AS validate_icon,
-       'azure' AS validate_color,
-       'New Recurring Expense' AS title;
+       'green' AS validate_color,
+       'Nouveau modele de charge' AS title;
 
-SELECT 'select' AS type, 'property_id' AS name, 'Property' AS label,
+SELECT 'select' AS type, 'property_id' AS name, 'Bien concerne' AS label,
        TRUE AS required, 3 AS width, TRUE AS dropdown,
+       'La charge sera rattachee a ce bien.' AS description,
        (SELECT json_agg(json_build_object('label', p.name, 'value', p.id) ORDER BY p.name)
           FROM accounting.property p)::TEXT AS options;
 
-SELECT 'select' AS type, 'category_code' AS name, 'Category' AS label,
+SELECT 'select' AS type, 'category_code' AS name, 'Categorie' AS label,
        3 AS width, TRUE AS dropdown, TRUE AS empty_option,
+       'Categorie fiscale LMNP (optionnel).' AS description,
        (SELECT json_agg(json_build_object('label', c.label, 'value', c.code) ORDER BY c.sort_order)
           FROM accounting.expense_category c)::TEXT AS options;
 
-SELECT 'text' AS type, 'supplier_name' AS name, 'Supplier' AS label, 3 AS width;
+SELECT 'text' AS type, 'supplier_name' AS name, 'Fournisseur' AS label, 3 AS width,
+       'Ex: AXA, Syndic Martin...' AS placeholder;
 
 SELECT 'text' AS type, 'description' AS name, 'Description' AS label,
-       TRUE AS required, 3 AS width;
+       TRUE AS required, 3 AS width,
+       'Ex: Assurance PNO, Charges copro T1...' AS placeholder;
 
-SELECT 'number' AS type, 'amount' AS name, 'Amount (€)' AS label,
-       TRUE AS required, 3 AS width, 0.01 AS step;
+SELECT 'number' AS type, 'amount' AS name, 'Montant (€)' AS label,
+       TRUE AS required, 3 AS width, 0.01 AS step,
+       'Montant de chaque echeance.' AS description;
 
-SELECT 'select' AS type, 'frequency' AS name, 'Frequency' AS label,
+SELECT 'select' AS type, 'frequency' AS name, 'Frequence' AS label,
        3 AS width, TRUE AS dropdown,
-       '[{"label":"Monthly","value":"monthly"},{"label":"Quarterly","value":"quarterly"},{"label":"Yearly","value":"yearly"}]' AS options;
+       '[{"label":"Mensuel","value":"monthly"},{"label":"Trimestriel","value":"quarterly"},{"label":"Annuel","value":"yearly"}]' AS options;
 
--- ── Templates table ─────────────────────────────────────────────────────────
+-- ── Tableau des modeles ─────────────────────────────────────────────────────
 
-SELECT 'title' AS component, 'Templates' AS contents, 3 AS level;
+SELECT 'divider' AS component, 'Vos modeles de charges' AS contents, 3 AS size;
+
+SELECT 'text' AS component;
+SELECT 'Chaque modele represente une charge recurrente. La colonne "Periode en cours" indique si la facture du mois a deja ete generee (**vert**) ou non (**orange** — cliquez sur la ligne pour generer).' AS contents_md;
+
+SELECT 'alert' AS component,
+       'repeat' AS icon,
+       'azure' AS color,
+       'Aucun modele de charge' AS title,
+       'Creez votre premier modele ci-dessus. Par exemple : assurance habitation mensuelle, taxe fonciere annuelle, charges de copropriete trimestrielles.' AS description
+ WHERE NOT EXISTS (SELECT 1 FROM accounting.recurring_expense);
 
 SELECT 'table' AS component,
        TRUE AS sort, TRUE AS hover, TRUE AS striped_rows,
-       'Amount' AS align_right,
-       'No recurring expense templates.' AS empty_description;
+       'Montant' AS align_right,
+       'Aucun modele de charge recurrente.' AS empty_description;
 
-SELECT p.name AS "Property",
-       COALESCE(c.label, '—') AS "Category",
-       COALESCE(re.supplier_name, '—') AS "Supplier",
+SELECT p.name AS "Bien",
+       COALESCE(c.label, '—') AS "Categorie",
+       COALESCE(re.supplier_name, '—') AS "Fournisseur",
        re.description AS "Description",
-       to_char(re.amount, 'FM999G999D00') || ' €' AS "Amount",
-       INITCAP(re.frequency) AS "Frequency",
-       CASE WHEN re.active THEN 'Yes' ELSE 'No' END AS "Active",
-       CASE WHEN g.id IS NOT NULL THEN 'Generated' ELSE 'Pending' END AS "Current Period",
+       to_char(re.amount, 'FM999G999D00') || ' €' AS "Montant",
+       CASE re.frequency
+           WHEN 'monthly' THEN 'Mensuel'
+           WHEN 'quarterly' THEN 'Trimestriel'
+           WHEN 'yearly' THEN 'Annuel' END AS "Frequence",
+       CASE WHEN re.active THEN 'Actif' ELSE 'Inactif' END AS "Statut",
+       CASE WHEN g.id IS NOT NULL THEN 'Generee' ELSE 'A generer' END AS "Periode en cours",
        CASE WHEN g.id IS NOT NULL THEN 'green' ELSE 'orange' END AS _sqlpage_color,
        CASE WHEN g.id IS NULL AND re.active
             THEN 'generate_recurring.sql?id=' || re.id

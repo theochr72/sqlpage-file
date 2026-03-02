@@ -1,43 +1,65 @@
--- tenants.sql — Tenant management
+-- tenants.sql — Gestion des locataires
 
 SELECT 'dynamic' AS component, sqlpage.run_sql('shell.sql') AS properties;
 
-SELECT 'title' AS component, 'Tenants' AS contents, 2 AS level;
+-- ── En-tete ─────────────────────────────────────────────────────────────────
 
--- ── Add tenant form ─────────────────────────────────────────────────────────
+SELECT 'hero' AS component,
+       'Locataires' AS title,
+       'Gerez votre carnet de locataires. Chaque fiche regroupe les coordonnees, l''historique des baux et les paiements associes.' AS description;
+
+-- ── Formulaire d'ajout ──────────────────────────────────────────────────────
 
 SELECT 'form' AS component,
        'POST' AS method,
        'save_tenant.sql' AS action,
-       'Add Tenant' AS validate,
+       'Ajouter le locataire' AS validate,
        'plus' AS validate_icon,
-       'azure' AS validate_color,
-       'New Tenant' AS title;
+       'green' AS validate_color,
+       'Nouveau locataire' AS title;
 
-SELECT 'text' AS type, 'name' AS name, 'Name' AS label,
-       TRUE AS required, 4 AS width;
+SELECT 'text' AS type, 'name' AS name, 'Nom complet' AS label,
+       TRUE AS required, 4 AS width,
+       'Nom et prenom du locataire.' AS description;
 
-SELECT 'email' AS type, 'email' AS name, 'Email' AS label, 4 AS width;
+SELECT 'email' AS type, 'email' AS name, 'Email' AS label, 4 AS width,
+       'Pour le contacter en cas de besoin.' AS description;
 
-SELECT 'tel' AS type, 'phone' AS name, 'Phone' AS label, 4 AS width;
+SELECT 'tel' AS type, 'phone' AS name, 'Telephone' AS label, 4 AS width;
 
-SELECT 'textarea' AS type, 'notes' AS name, 'Notes' AS label, 12 AS width, 2 AS rows;
+SELECT 'textarea' AS type, 'notes' AS name, 'Notes' AS label, 12 AS width, 2 AS rows,
+       'Informations complementaires : garant, situation, etc.' AS description;
 
--- ── Tenant list ─────────────────────────────────────────────────────────────
+-- ── Liste des locataires ────────────────────────────────────────────────────
+
+SELECT 'divider' AS component, 'Vos locataires' AS contents, 3 AS size;
+
+SELECT 'alert' AS component,
+       'user-plus' AS icon,
+       'azure' AS color,
+       'Aucun locataire enregistre' AS title,
+       'Ajoutez votre premier locataire ci-dessus. Vous pourrez ensuite lui attribuer un bail sur un de vos biens.' AS description
+ WHERE NOT EXISTS (SELECT 1 FROM accounting.tenant);
 
 SELECT 'card' AS component, 3 AS columns;
 
 SELECT t.name AS title,
-       COALESCE(t.email, '') AS description,
-       COALESCE(t.phone, '') AS footer,
+       CASE WHEN t.email IS NOT NULL AND t.phone IS NOT NULL
+            THEN t.email || ' — ' || t.phone
+            WHEN t.email IS NOT NULL THEN t.email
+            WHEN t.phone IS NOT NULL THEN t.phone
+            ELSE 'Pas de coordonnees' END AS description,
        'user' AS icon,
        'tenant.sql?id=' || t.id AS link,
-       COALESCE(
-           (SELECT p.name FROM accounting.lease l
-              JOIN accounting.property p ON p.id = l.property_id
-             WHERE l.tenant_id = t.id AND l.end_date IS NULL
-             LIMIT 1),
-           'No active lease'
-       ) AS footer_md
+       CASE WHEN active_lease.property_name IS NOT NULL THEN 'green' ELSE 'azure' END AS color,
+       COALESCE('Bail actif : ' || active_lease.property_name,
+                'Aucun bail en cours') AS footer_md
   FROM accounting.tenant t
+  LEFT JOIN LATERAL (
+      SELECT p.name AS property_name
+        FROM accounting.lease l
+        JOIN accounting.property p ON p.id = l.property_id
+       WHERE l.tenant_id = t.id AND l.end_date IS NULL
+       LIMIT 1
+  ) active_lease ON TRUE
  ORDER BY t.name;
