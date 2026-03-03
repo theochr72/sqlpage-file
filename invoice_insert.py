@@ -94,6 +94,7 @@ def parse_amount(value) -> float | None:
     if isinstance(value, (int, float)):
         return float(value)
     cleaned = str(value).replace("\xa0", "").replace(" ", "").replace(",", ".")
+    cleaned = re.sub(r"[^\d.\-]", "", cleaned)
     try:
         return float(cleaned)
     except ValueError:
@@ -113,8 +114,10 @@ def slugify(text: str) -> str:
 
 
 def rename_pdf(pdf_path: Path, issue_date_str: str | None,
-               supplier_name: str | None, invoice_number: str | None) -> Path:
-    """Renomme le PDF en YYYY-MM-DD_fournisseur_numero.pdf sur place.
+               supplier_name: str | None, invoice_number: str | None,
+               target_dir: Path | None = None) -> Path:
+    """Renomme le PDF en YYYY-MM-DD_fournisseur_numero.pdf.
+    Si target_dir est fourni, déplace le fichier dans ce répertoire.
     Gère les conflits avec un suffixe numérique. Retourne le nouveau Path."""
     if issue_date_str:
         try:
@@ -128,23 +131,26 @@ def rename_pdf(pdf_path: Path, issue_date_str: str | None,
     supplier_part = slugify(supplier_name) if supplier_name else "unknown-supplier"
     invoice_part = slugify(invoice_number) if invoice_number else "unknown-number"
 
+    dest_dir = target_dir if target_dir else pdf_path.parent
+    dest_dir.mkdir(parents=True, exist_ok=True)
+
     new_stem = f"{date_part}_{supplier_part}_{invoice_part}"
     new_name = f"{new_stem}.pdf"
-    new_path = pdf_path.parent / new_name
+    new_path = dest_dir / new_name
 
     # Gestion des conflits de noms
     if new_path.exists() and new_path != pdf_path:
         counter = 1
         while True:
             new_name = f"{new_stem}_{counter}.pdf"
-            new_path = pdf_path.parent / new_name
+            new_path = dest_dir / new_name
             if not new_path.exists():
                 break
             counter += 1
 
     if new_path != pdf_path:
         pdf_path.rename(new_path)
-        logger.info("Renamed %s -> %s", pdf_path.name, new_name)
+        logger.info("Renamed %s -> %s", pdf_path.name, new_path)
     else:
         logger.info("File already has target name: %s", new_name)
 
@@ -171,9 +177,9 @@ def resolve_paths(patterns: list[str]) -> list[Path]:
 # ── Détection de doublons ─────────────────────────────────────────────────────
 
 
-def is_already_processed(pg: PgUtil, filename: str, schema: str) -> dict | None:
+def is_already_processed(pg: PgUtil, filename: str, schema: str) -> tuple | None:
     """Vérifie si un fichier a déjà été traité (par nom original ou renommé).
-    Retourne la ligne existante ou None."""
+    Retourne (id, invoice_number, status, manually_edited_at) ou None."""
     statement = f"""
         SELECT id, invoice_number, status, manually_edited_at
           FROM {schema}.invoice
@@ -435,6 +441,8 @@ def main() -> None:
                         help="Fichiers PDF ou patterns glob (ex: invoices/*.pdf)")
     parser.add_argument("--schema", default="accounting",
                         help="Schéma PostgreSQL cible (défaut: accounting)")
+    parser.add_argument("--uploads-dir", type=Path, default=None,
+                        help="Répertoire cible pour les PDF renommés (défaut: sur place)")
     parser.add_argument("--no-rename", action="store_true",
                         help="Ne pas renommer les fichiers PDF")
     parser.add_argument("--force", action="store_true",
@@ -472,9 +480,10 @@ def main() -> None:
         if not args.force and not args.dryrun:
             existing = is_already_processed(pg, pdf_path.name, args.schema)
             if existing:
-                inv_num = existing.get("invoice_number", "?")
-                status = existing.get("status", "?")
-                edited = existing.get("manually_edited_at")
+                # execute_fetch_one returns a tuple: (id, invoice_number, status, manually_edited_at)
+                inv_num = existing[1] or "?"
+                status = existing[2] or "?"
+                edited = existing[3]
                 if edited:
                     logger.warning(
                         "SKIP %s — already processed as %s (status: %s, "
@@ -524,6 +533,7 @@ def main() -> None:
                 issue_date_str=val(invoice_data.get("issue_date")),
                 supplier_name=val(invoice_data.get("supplier", {}).get("name")),
                 invoice_number=val(invoice_data.get("invoice_number")),
+                target_dir=args.uploads_dir,
             )
             renamed_filename = renamed_path.name
 
