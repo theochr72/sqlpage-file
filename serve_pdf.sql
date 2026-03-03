@@ -6,12 +6,13 @@ SELECT 'status_code' AS component, 404 AS status
 SELECT 'redirect' AS component, 'invoices.sql' AS link
  WHERE $id IS NULL OR $id = '' OR $id !~ '^\d+$';
 
--- Construire le chemin du fichier
-SET _renamed = (SELECT renamed_filename FROM accounting.invoice WHERE id = $id::INT);
-SET _original = (SELECT original_filename FROM accounting.invoice WHERE id = $id::INT);
-SET _filename = COALESCE($_renamed, $_original);
-SET _path = 'uploads/' || $_filename;
-SET _data_url = sqlpage.read_file_as_data_url($_path);
+-- Construire le chemin du fichier (only if pdf_available)
+SET _filename = (SELECT COALESCE(renamed_filename, original_filename) FROM accounting.invoice WHERE id = $id::INT);
+SET _data_url = (
+    SELECT sqlpage.read_file_as_data_url('uploads/' || COALESCE(renamed_filename, original_filename))
+      FROM accounting.invoice
+     WHERE id = $id::INT AND pdf_available = TRUE
+);
 
 -- Servir le PDF si trouvé
 SELECT 'http_header' AS component,
@@ -30,5 +31,5 @@ SELECT 'status_code' AS component, 404 AS status
 
 SELECT 'html' AS component
  WHERE $_data_url IS NULL;
-SELECT '<p style="padding:1em;color:#666">PDF introuvable&nbsp;: <code>' || $_path || '</code></p>' AS html
+SELECT '<p style="padding:1em;color:#666">PDF not available. Upload it or re-run invoice_insert.py with --uploads-dir.</p>' AS html
  WHERE $_data_url IS NULL;

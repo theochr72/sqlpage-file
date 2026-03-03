@@ -207,7 +207,7 @@ def mark_upload_processed(pg: PgUtil, filename: str, schema: str) -> None:
            SET processed = TRUE
          WHERE filename = %s AND processed = FALSE;
     """
-    pg.execute(statement=statement, data=[filename])
+    pg.query_without_return(statement=statement, data=[filename])
 
 
 # ── Extraction ─────────────────────────────────────────────────────────────────
@@ -256,13 +256,13 @@ def db_connection(database_configuration: dict) -> PgUtil:
 
 def db_fetch(pg: PgUtil, statement: str, data: list) -> list:
     """Execute a SELECT and return rows as list."""
-    result = pg.execute_fetch_all(statement=statement, data=data)
+    result = pg.query(statement=statement, data=data)
     return result if result else []
 
 
 def db_fetch_one(pg: PgUtil, statement: str, data: list):
     """Execute a SELECT and return a single row or None."""
-    return pg.execute_fetch_one(statement=statement, data=data)
+    return pg.query_get_one(statement=statement, data=data)
 
 
 def insert_invoice(pg: PgUtil, data: dict, schema: str, dryrun: bool,
@@ -285,6 +285,8 @@ def insert_invoice(pg: PgUtil, data: dict, schema: str, dryrun: bool,
     customer_name    = val(customer.get("name"))
     customer_address = val(customer.get("address"))
     total_amount     = parse_amount(val(data.get("total_amount")))
+    total_ht         = parse_amount(val(data.get("total_ht")))
+    tva_amount       = parse_amount(val(data.get("tva_amount")))
     currency         = val(data.get("currency"))
 
     overall_confidence = compute_overall_confidence(data)
@@ -296,7 +298,7 @@ def insert_invoice(pg: PgUtil, data: dict, schema: str, dryrun: bool,
             issue_date,       due_date,
             supplier_name,    supplier_vat_id,  supplier_address,
             customer_name,    customer_address,
-            total_amount,     currency,
+            total_amount,     total_ht,  tva_amount,  currency,
             invoice_number_confidence, document_type_confidence,
             issue_date_confidence,     due_date_confidence,
             supplier_name_confidence,  supplier_vat_id_confidence,
@@ -304,12 +306,12 @@ def insert_invoice(pg: PgUtil, data: dict, schema: str, dryrun: bool,
             customer_name_confidence,  customer_address_confidence,
             total_amount_confidence,   currency_confidence,
             original_filename, renamed_filename, raw_json,
-            overall_confidence, status
+            overall_confidence, pdf_available, status
         )
         VALUES (
+            %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
             %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-            %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-            %s, %s, %s::jsonb, %s, 'pending_review'
+            %s, %s, %s::jsonb, %s, %s, 'pending_review'
         )
         ON CONFLICT (invoice_number) DO UPDATE SET
             document_type    = EXCLUDED.document_type,
@@ -321,6 +323,8 @@ def insert_invoice(pg: PgUtil, data: dict, schema: str, dryrun: bool,
             customer_name    = EXCLUDED.customer_name,
             customer_address = EXCLUDED.customer_address,
             total_amount     = EXCLUDED.total_amount,
+            total_ht         = EXCLUDED.total_ht,
+            tva_amount       = EXCLUDED.tva_amount,
             currency         = EXCLUDED.currency,
             invoice_number_confidence   = EXCLUDED.invoice_number_confidence,
             document_type_confidence    = EXCLUDED.document_type_confidence,
@@ -337,17 +341,21 @@ def insert_invoice(pg: PgUtil, data: dict, schema: str, dryrun: bool,
             renamed_filename   = EXCLUDED.renamed_filename,
             raw_json           = EXCLUDED.raw_json,
             overall_confidence = EXCLUDED.overall_confidence,
+            pdf_available      = EXCLUDED.pdf_available,
             manually_edited_at = NULL,
             manually_edited_fields = NULL,
             processed_at       = now()
         WHERE {schema}.invoice.manually_edited_at IS NULL;
     """
+    # pdf_available is True when the file has been processed (renamed/moved)
+    pdf_is_available = not dryrun
+
     invoice_data = [
         invoice_number,   document_type,
         issue_date,       due_date,
         supplier_name,    supplier_vat_id,  supplier_address,
         customer_name,    customer_address,
-        total_amount,     currency,
+        total_amount,     total_ht,  tva_amount,  currency,
         # Confidence scores
         conf(data.get("invoice_number")),  conf(data.get("document_type")),
         conf(data.get("issue_date")),      conf(data.get("due_date")),
@@ -359,17 +367,18 @@ def insert_invoice(pg: PgUtil, data: dict, schema: str, dryrun: bool,
         original_filename, renamed_filename,
         json.dumps(data, ensure_ascii=False),
         overall_confidence,
+        pdf_is_available,
     ]
 
-    logger.debug("Invoice INSERT:\n%s", pg.mogrify(statement=statement, data=invoice_data))
+    logger.debug("Invoice INSERT:\n%s", pg.show_prepared_sql(statement=statement, data=invoice_data))
     if not dryrun:
-        pg.execute(statement=statement, data=invoice_data)
+        pg.query_without_return(statement=statement, data=invoice_data)
 
     # ── 2. Lignes de facture ──────────────────────────────────────────────────
     # Supprime les anciennes lignes pour gérer le re-processing
     delete_stmt = f"DELETE FROM {schema}.invoice_item WHERE invoice_number = %s;"
     if not dryrun:
-        pg.execute(statement=delete_stmt, data=[invoice_number])
+        pg.query_without_return(statement=delete_stmt, data=[invoice_number])
 
     for idx, item in enumerate(data.get("items", []), start=1):
         statement = f"""
@@ -393,9 +402,9 @@ def insert_invoice(pg: PgUtil, data: dict, schema: str, dryrun: bool,
             conf(item.get("total")),
         ]
 
-        logger.debug("Item INSERT:\n%s", pg.mogrify(statement=statement, data=item_data))
+        logger.debug("Item INSERT:\n%s", pg.show_prepared_sql(statement=statement, data=item_data))
         if not dryrun:
-            pg.execute(statement=statement, data=item_data)
+            pg.query_without_return(statement=statement, data=item_data)
 
     if dryrun:
         logger.info("[DRYRUN] Facture %s — aucune donnée écrite.", invoice_number)

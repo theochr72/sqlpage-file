@@ -1,5 +1,15 @@
 -- update_status.sql — Met à jour le statut d'une facture et redirige
 
+-- Audit log: record the status change
+INSERT INTO accounting.audit_log (table_name, record_id, action, old_values, new_values)
+SELECT 'invoice', id, 'status_change',
+       json_build_object('status', status)::JSONB,
+       json_build_object('status', $status)::JSONB
+  FROM accounting.invoice
+ WHERE id = $id::INT
+   AND $status IN ('pending_review', 'validated', 'rejected')
+   AND status IS DISTINCT FROM $status;
+
 UPDATE accounting.invoice
    SET status = $status
  WHERE id = $id::INT

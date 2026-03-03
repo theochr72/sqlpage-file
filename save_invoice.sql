@@ -4,6 +4,25 @@
 SELECT 'redirect' AS component, 'invoices.sql' AS link
  WHERE $id IS NULL OR $id = '';
 
+-- Audit log
+INSERT INTO accounting.audit_log (table_name, record_id, action, old_values, new_values)
+SELECT 'invoice', id, 'manual_edit',
+       json_build_object(
+           'invoice_number', invoice_number,
+           'status', status,
+           'total_amount', total_amount,
+           'category_code', category_code,
+           'property_id', property_id
+       )::JSONB,
+       json_build_object(
+           'invoice_number', $invoice_number,
+           'status', $status,
+           'total_amount', $total_amount,
+           'category_code', NULLIF($category_code, ''),
+           'property_id', NULLIF($property_id, '')
+       )::JSONB
+  FROM accounting.invoice WHERE id = $id::INT;
+
 UPDATE accounting.invoice
    SET invoice_number   = $invoice_number,
        document_type    = NULLIF($document_type, ''),
@@ -15,6 +34,8 @@ UPDATE accounting.invoice
        customer_name    = NULLIF($customer_name, ''),
        customer_address = NULLIF($customer_address, ''),
        total_amount     = NULLIF($total_amount, '')::NUMERIC,
+       total_ht         = NULLIF($total_ht, '')::NUMERIC,
+       tva_amount       = NULLIF($tva_amount, '')::NUMERIC,
        currency         = NULLIF($currency, ''),
        status           = $status,
        -- LMNP fields
@@ -37,6 +58,8 @@ UPDATE accounting.invoice
                    (CASE WHEN customer_name IS DISTINCT FROM NULLIF($customer_name, '') THEN 'customer_name' END),
                    (CASE WHEN customer_address IS DISTINCT FROM NULLIF($customer_address, '') THEN 'customer_address' END),
                    (CASE WHEN total_amount::TEXT IS DISTINCT FROM NULLIF($total_amount, '') THEN 'total_amount' END),
+                   (CASE WHEN total_ht::TEXT IS DISTINCT FROM NULLIF($total_ht, '') THEN 'total_ht' END),
+                   (CASE WHEN tva_amount::TEXT IS DISTINCT FROM NULLIF($tva_amount, '') THEN 'tva_amount' END),
                    (CASE WHEN currency IS DISTINCT FROM NULLIF($currency, '') THEN 'currency' END),
                    (CASE WHEN status IS DISTINCT FROM $status THEN 'status' END),
                    (CASE WHEN property_id::TEXT IS DISTINCT FROM NULLIF($property_id, '') THEN 'property_id' END),
@@ -49,4 +72,4 @@ UPDATE accounting.invoice
  WHERE id = $id::INT;
 
 SELECT 'redirect' AS component,
-       'invoice.sql?id=' || $id AS link;
+       'invoice.sql?id=' || $id || '&saved=1' AS link;

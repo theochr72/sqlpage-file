@@ -103,6 +103,25 @@ SELECT 'Suppliers' AS title,
    AND ($date_to IS NULL OR $date_to = '' OR i.issue_date <= $date_to::DATE)
    AND ($property IS NULL OR $property = '' OR i.property_id = $property::INT);
 
+-- ── Bulk actions (pending_review only) ──────────────────────────────────────
+
+SELECT 'button' AS component, 'end' AS justify, 'sm' AS size
+ WHERE $status = 'pending_review';
+
+SELECT 'Validate All (≥80%)' AS title,
+       'green' AS color,
+       'checks' AS icon,
+       'bulk_status.sql?action=validate&min_confidence=0.8' AS link
+ WHERE $status = 'pending_review'
+   AND EXISTS (SELECT 1 FROM accounting.invoice WHERE status = 'pending_review' AND overall_confidence >= 0.8);
+
+SELECT 'Reject All (< 20%)' AS title,
+       'red' AS outline,
+       'circle-x' AS icon,
+       'bulk_status.sql?action=reject&max_confidence=0.2' AS link
+ WHERE $status = 'pending_review'
+   AND EXISTS (SELECT 1 FROM accounting.invoice WHERE status = 'pending_review' AND overall_confidence < 0.2);
+
 -- ── Tableau des factures ─────────────────────────────────────────────────────
 
 SELECT 'table' AS component,
@@ -114,29 +133,24 @@ SELECT 'table' AS component,
        TRUE AS small,
        'No invoices found matching your filters.' AS empty_description;
 
-SELECT i.invoice_number AS "Invoice #",
-       i.supplier_name AS "Supplier",
-       i.issue_date::TEXT AS "Date",
-       COALESCE(i.total_amount::TEXT || ' ' || COALESCE(i.currency, ''), '') AS "Amount",
-       COALESCE(c.label, '') AS "Category",
-       COALESCE(p.name, '') AS "Property",
-       COALESCE(ROUND(i.overall_confidence * 100)::TEXT || '%', '-') AS "Confidence",
-       CASE WHEN i.status = 'pending_review' THEN 'Pending'
-            WHEN i.status = 'validated' THEN 'Validated'
-            WHEN i.status = 'rejected' THEN 'Rejected'
-       END AS "Status",
-       CASE WHEN i.status = 'validated' THEN 'green'
-            WHEN i.status = 'rejected' THEN 'red'
-            WHEN i.overall_confidence < 0.5 THEN 'red'
-            WHEN i.overall_confidence < 0.8 THEN 'yellow'
+SELECT v.invoice_number AS "Invoice #",
+       v.supplier_name AS "Supplier",
+       v.issue_date::TEXT AS "Date",
+       COALESCE(v.total_amount::TEXT || ' ' || COALESCE(v.currency, ''), '') AS "Amount",
+       v.category_label AS "Category",
+       v.property_name AS "Property",
+       COALESCE(ROUND(v.overall_confidence * 100)::TEXT || '%', '-') AS "Confidence",
+       v.status_label AS "Status",
+       CASE WHEN v.status = 'validated' THEN 'green'
+            WHEN v.status = 'rejected' THEN 'red'
+            WHEN v.overall_confidence < 0.5 THEN 'red'
+            WHEN v.overall_confidence < 0.8 THEN 'yellow'
             ELSE NULL END AS _sqlpage_color,
-       'invoice.sql?id=' || i.id AS _sqlpage_id
-  FROM accounting.invoice i
-  LEFT JOIN accounting.expense_category c ON c.code = i.category_code
-  LEFT JOIN accounting.property p ON p.id = i.property_id
- WHERE ($status IS NULL OR $status = '' OR i.status = $status)
-   AND ($supplier IS NULL OR $supplier = '' OR i.supplier_name = $supplier)
-   AND ($date_from IS NULL OR $date_from = '' OR i.issue_date >= $date_from::DATE)
-   AND ($date_to IS NULL OR $date_to = '' OR i.issue_date <= $date_to::DATE)
-   AND ($property IS NULL OR $property = '' OR i.property_id = $property::INT)
- ORDER BY i.issue_date DESC NULLS LAST;
+       'invoice.sql?id=' || v.id AS _sqlpage_id
+  FROM accounting.vw_invoice_summary v
+ WHERE ($status IS NULL OR $status = '' OR v.status = $status)
+   AND ($supplier IS NULL OR $supplier = '' OR v.supplier_name = $supplier)
+   AND ($date_from IS NULL OR $date_from = '' OR v.issue_date >= $date_from::DATE)
+   AND ($date_to IS NULL OR $date_to = '' OR v.issue_date <= $date_to::DATE)
+   AND ($property IS NULL OR $property = '' OR v.property_id = $property::INT)
+ ORDER BY v.issue_date DESC NULLS LAST;

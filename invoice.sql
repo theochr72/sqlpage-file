@@ -15,6 +15,15 @@ SELECT 'Invoices' AS title, '/invoices.sql' AS link;
 SELECT i.invoice_number AS title, TRUE AS active
   FROM accounting.invoice i WHERE i.id = $id::INT;
 
+-- ── Save feedback ─────────────────────────────────────────────────────────────
+
+SELECT 'alert' AS component,
+       'circle-check' AS icon,
+       'green' AS color,
+       'Changes saved successfully.' AS title,
+       TRUE AS dismissible
+ WHERE $saved = '1';
+
 -- ── Alerte si édité manuellement ──────────────────────────────────────────────
 
 SELECT 'alert' AS component,
@@ -52,13 +61,15 @@ SELECT 'Validate' AS title,
 SELECT 'Reject' AS title,
        'red' AS outline,
        'circle-x' AS icon,
-       'update_status.sql?id=' || $id || '&status=rejected' AS link
+       'update_status.sql?id=' || $id || '&status=rejected' AS link,
+       'confirm-reject' AS id
   FROM accounting.invoice WHERE id = $id::INT AND status != 'rejected';
 
 SELECT 'Reset' AS title,
        'orange' AS outline,
        'clock' AS icon,
-       'update_status.sql?id=' || $id || '&status=pending_review' AS link
+       'update_status.sql?id=' || $id || '&status=pending_review' AS link,
+       'confirm-reset' AS id
   FROM accounting.invoice WHERE id = $id::INT AND status != 'pending_review';
 
 -- ── KPIs de la facture ───────────────────────────────────────────────────────
@@ -182,6 +193,14 @@ SELECT 'Due Date' AS title,
             ELSE 'red' END AS color
   FROM accounting.invoice i WHERE i.id = $id::INT;
 
+SELECT 'Total HT' AS title,
+       COALESCE(i.total_ht::TEXT, 'N/A') AS description
+  FROM accounting.invoice i WHERE i.id = $id::INT;
+
+SELECT 'TVA' AS title,
+       COALESCE(i.tva_amount::TEXT, 'N/A') AS description
+  FROM accounting.invoice i WHERE i.id = $id::INT;
+
 SELECT 'Currency' AS title,
        COALESCE(i.currency, 'N/A') AS description,
        CASE WHEN COALESCE(i.currency_confidence, 0) >= 0.8 THEN 'green'
@@ -215,7 +234,7 @@ SELECT 'title' AS component,
 
 SELECT 'table' AS component,
        TRUE AS sort,
-       'Quantity,Unit Price,Total,Desc Conf,Qty Conf,Price Conf,Total Conf' AS align_right,
+       'Quantity,Unit Price,Total,TVA %,Desc Conf,Qty Conf,Price Conf,Total Conf' AS align_right,
        TRUE AS hover,
        TRUE AS striped_rows,
        'No line items extracted.' AS empty_description;
@@ -225,6 +244,7 @@ SELECT item_index AS "#",
        quantity::TEXT AS "Quantity",
        unit_price::TEXT AS "Unit Price",
        total::TEXT AS "Total",
+       COALESCE(tva_rate::TEXT, '-') AS "TVA %",
        COALESCE(ROUND(description_confidence * 100)::TEXT || '%', '-') AS "Desc Conf",
        COALESCE(ROUND(quantity_confidence * 100)::TEXT || '%', '-') AS "Qty Conf",
        COALESCE(ROUND(unit_price_confidence * 100)::TEXT || '%', '-') AS "Price Conf",
@@ -274,3 +294,18 @@ SELECT 'button' AS component, 'start' AS justify;
 SELECT 'Back to Invoices' AS title,
        'arrow-left' AS icon,
        'invoices.sql' AS link;
+
+-- ── Confirmation dialogs for destructive actions ───────────────────────────
+
+SELECT 'html' AS component;
+SELECT '<script>
+document.querySelectorAll("[id^=confirm-]").forEach(function(el) {
+    var a = el.closest("a") || el.querySelector("a") || el;
+    if (!a.href) return;
+    a.addEventListener("click", function(e) {
+        if (!confirm("Are you sure you want to change the status of this invoice?")) {
+            e.preventDefault();
+        }
+    });
+});
+</script>' AS html;

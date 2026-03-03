@@ -69,6 +69,20 @@ SELECT 'alert' AS component,
    )
 HAVING COUNT(*) > 0;
 
+-- Alerte baux expirant bientot (dans les 3 prochains mois)
+SELECT 'alert' AS component,
+       'calendar-event' AS icon,
+       'purple' AS color,
+       COUNT(*)::TEXT || ' bail(aux) expire(nt) dans les 3 prochains mois' AS title,
+       'Pensez a renouveler ou a preparer la fin de location.' AS description,
+       'leases.sql?tab=active' AS link,
+       'Voir les baux' AS link_text,
+       TRUE AS dismissible
+  FROM accounting.lease l
+ WHERE l.end_date IS NOT NULL
+   AND l.end_date BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '3 months'
+HAVING COUNT(*) > 0;
+
 -- ── KPIs principaux ─────────────────────────────────────────────────────────
 
 SELECT 'big_number' AS component, 4 AS columns;
@@ -101,35 +115,26 @@ SELECT 'Depenses totales' AS title,
   FROM accounting.invoice
  WHERE status = 'validated';
 
--- Cash-flow du mois
+-- Cash-flow du mois (CTE to avoid duplicating subqueries)
 SELECT 'Cash-flow du mois' AS title,
-       to_char(
-           COALESCE((SELECT SUM(rp.amount)
-                       FROM accounting.rent_payment rp
-                       JOIN accounting.lease l ON l.id = rp.lease_id
-                      WHERE rp.period_year = EXTRACT(YEAR FROM CURRENT_DATE)::INT
-                        AND rp.period_month = EXTRACT(MONTH FROM CURRENT_DATE)::INT), 0)
-           - COALESCE((SELECT SUM(i.total_amount)
-                         FROM accounting.invoice i
-                        WHERE EXTRACT(MONTH FROM i.issue_date) = EXTRACT(MONTH FROM CURRENT_DATE)
-                          AND COALESCE(i.fiscal_year, EXTRACT(YEAR FROM i.issue_date)::INT) = EXTRACT(YEAR FROM CURRENT_DATE)::INT
-                          AND i.status = 'validated'), 0),
-       'FM999G999D00') AS value,
+       to_char(cf.rent - cf.expenses, 'FM999G999D00') AS value,
        'Loyers recus moins depenses' AS description,
        '€' AS unit,
        'scale' AS icon,
-       CASE WHEN COALESCE((SELECT SUM(rp.amount)
-                              FROM accounting.rent_payment rp
-                              JOIN accounting.lease l ON l.id = rp.lease_id
-                             WHERE rp.period_year = EXTRACT(YEAR FROM CURRENT_DATE)::INT
-                               AND rp.period_month = EXTRACT(MONTH FROM CURRENT_DATE)::INT), 0)
-                - COALESCE((SELECT SUM(i.total_amount)
-                              FROM accounting.invoice i
-                             WHERE EXTRACT(MONTH FROM i.issue_date) = EXTRACT(MONTH FROM CURRENT_DATE)
-                               AND COALESCE(i.fiscal_year, EXTRACT(YEAR FROM i.issue_date)::INT) = EXTRACT(YEAR FROM CURRENT_DATE)::INT
-                               AND i.status = 'validated'), 0)
-                >= 0 THEN 'green' ELSE 'red' END AS color,
-       'monthly.sql' AS value_link;
+       CASE WHEN cf.rent - cf.expenses >= 0 THEN 'green' ELSE 'red' END AS color,
+       'monthly.sql' AS value_link
+  FROM (
+      SELECT COALESCE((SELECT SUM(rp.amount)
+                         FROM accounting.rent_payment rp
+                         JOIN accounting.lease l ON l.id = rp.lease_id
+                        WHERE rp.period_year = EXTRACT(YEAR FROM CURRENT_DATE)::INT
+                          AND rp.period_month = EXTRACT(MONTH FROM CURRENT_DATE)::INT), 0) AS rent,
+             COALESCE((SELECT SUM(i.total_amount)
+                         FROM accounting.invoice i
+                        WHERE EXTRACT(MONTH FROM i.issue_date) = EXTRACT(MONTH FROM CURRENT_DATE)
+                          AND COALESCE(i.fiscal_year, EXTRACT(YEAR FROM i.issue_date)::INT) = EXTRACT(YEAR FROM CURRENT_DATE)::INT
+                          AND i.status = 'validated'), 0) AS expenses
+  ) cf;
 
 -- ── Depenses sur 12 mois ──────────────────────────────────────────────────
 
@@ -157,6 +162,7 @@ SELECT to_char(d.month, 'YYYY-MM') AS x,
   LEFT JOIN accounting.invoice i
     ON date_trunc('month', i.issue_date) = d.month
    AND i.total_amount IS NOT NULL
+   AND i.status = 'validated'
  GROUP BY d.month
  ORDER BY d.month;
 
@@ -217,21 +223,18 @@ SELECT 'table' AS component,
        'Montant,Confiance' AS align_right,
        'Aucune facture pour le moment. Importez votre premier document depuis la page Import.' AS empty_description;
 
-SELECT invoice_number AS "N° Facture",
-       supplier_name AS "Fournisseur",
-       issue_date::TEXT AS "Date",
-       COALESCE(total_amount::TEXT || ' ' || COALESCE(currency, '€'), '') AS "Montant",
-       COALESCE(ROUND(overall_confidence * 100)::TEXT || '%', '-') AS "Confiance",
-       CASE WHEN status = 'pending_review' THEN 'A verifier'
-            WHEN status = 'validated' THEN 'Validee'
-            WHEN status = 'rejected' THEN 'Rejetee'
-       END AS "Statut",
-       CASE WHEN status = 'validated' THEN 'green'
-            WHEN status = 'rejected' THEN 'red'
-            WHEN overall_confidence < 0.5 THEN 'red'
-            WHEN overall_confidence < 0.8 THEN 'yellow'
+SELECT v.invoice_number AS "N° Facture",
+       v.supplier_name AS "Fournisseur",
+       v.issue_date::TEXT AS "Date",
+       COALESCE(v.total_amount::TEXT || ' ' || COALESCE(v.currency, '€'), '') AS "Montant",
+       COALESCE(ROUND(v.overall_confidence * 100)::TEXT || '%', '-') AS "Confiance",
+       v.status_label AS "Statut",
+       CASE WHEN v.status = 'validated' THEN 'green'
+            WHEN v.status = 'rejected' THEN 'red'
+            WHEN v.overall_confidence < 0.5 THEN 'red'
+            WHEN v.overall_confidence < 0.8 THEN 'yellow'
        END AS _sqlpage_color,
-       'invoice.sql?id=' || id AS _sqlpage_id
-  FROM accounting.invoice
- ORDER BY processed_at DESC
+       'invoice.sql?id=' || v.id AS _sqlpage_id
+  FROM accounting.vw_invoice_summary v
+ ORDER BY v.processed_at DESC
  LIMIT 10;

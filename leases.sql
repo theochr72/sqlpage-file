@@ -8,6 +8,16 @@ SELECT 'hero' AS component,
        'Baux de location' AS title,
        'Un bail lie un locataire a un bien pour une periode donnee. Suivez ici les baux actifs et termines, et creez-en de nouveaux.' AS description;
 
+-- ── Error feedback ──────────────────────────────────────────────────────────
+
+SELECT 'alert' AS component,
+       'alert-triangle' AS icon,
+       'red' AS color,
+       'Impossible de creer le bail' AS title,
+       'Un bail actif (sans date de fin) existe deja pour ce bien. Terminez-le d''abord en ajoutant une date de fin.' AS description,
+       TRUE AS dismissible
+ WHERE $error = 'overlap';
+
 -- ── Onglets ─────────────────────────────────────────────────────────────────
 
 SELECT 'tab' AS component, TRUE AS center;

@@ -81,8 +81,16 @@ SELECT 'textarea' AS type, 'customer_address' AS name, 'Customer Address' AS lab
        i.customer_address AS value, 2 AS rows, 6 AS width
   FROM accounting.invoice i WHERE i.id = $id::INT;
 
-SELECT 'number' AS type, 'total_amount' AS name, 'Total Amount' AS label,
+SELECT 'number' AS type, 'total_amount' AS name, 'Total Amount (TTC)' AS label,
        i.total_amount::TEXT AS value, 0.01 AS step, 4 AS width
+  FROM accounting.invoice i WHERE i.id = $id::INT;
+
+SELECT 'number' AS type, 'total_ht' AS name, 'Total HT' AS label,
+       i.total_ht::TEXT AS value, 0.01 AS step, 4 AS width
+  FROM accounting.invoice i WHERE i.id = $id::INT;
+
+SELECT 'number' AS type, 'tva_amount' AS name, 'TVA Amount' AS label,
+       i.tva_amount::TEXT AS value, 0.01 AS step, 2 AS width
   FROM accounting.invoice i WHERE i.id = $id::INT;
 
 SELECT 'text' AS type, 'currency' AS name, 'Currency' AS label,
@@ -93,14 +101,36 @@ SELECT 'text' AS type, 'currency' AS name, 'Currency' AS label,
 
 SELECT 'divider' AS component, 'LMNP' AS contents;
 
+-- Auto-suggest property from supplier_mapping
+SET _auto_property = (
+    SELECT sm.property_id::TEXT
+      FROM accounting.supplier_mapping sm
+      JOIN accounting.invoice i ON i.id = $id::INT
+     WHERE i.supplier_name ILIKE '%' || sm.supplier_pattern || '%'
+       AND i.property_id IS NULL
+     LIMIT 1
+);
+
+-- Auto-suggest category from supplier_mapping
+SET _auto_category = (
+    SELECT sm.category_code
+      FROM accounting.supplier_mapping sm
+      JOIN accounting.invoice i ON i.id = $id::INT
+     WHERE i.supplier_name ILIKE '%' || sm.supplier_pattern || '%'
+       AND i.category_code IS NULL
+     LIMIT 1
+);
+
 SELECT 'select' AS type, 'property_id' AS name, 'Property' AS label,
-       i.property_id::TEXT AS value, 4 AS width, TRUE AS dropdown,
+       COALESCE(i.property_id::TEXT, $_auto_property) AS value, 4 AS width, TRUE AS dropdown,
+       CASE WHEN i.property_id IS NULL AND $_auto_property IS NOT NULL THEN 'Auto-suggested from supplier' END AS description,
        (SELECT json_agg(json_build_object('label', p.name || COALESCE(' — ' || p.city, ''), 'value', p.id))
           FROM accounting.property p)::TEXT AS options
   FROM accounting.invoice i WHERE i.id = $id::INT;
 
 SELECT 'select' AS type, 'category_code' AS name, 'Expense Category' AS label,
-       i.category_code AS value, 4 AS width, TRUE AS dropdown,
+       COALESCE(i.category_code, $_auto_category) AS value, 4 AS width, TRUE AS dropdown,
+       CASE WHEN i.category_code IS NULL AND $_auto_category IS NOT NULL THEN 'Auto-suggested from supplier' END AS description,
        (SELECT json_agg(json_build_object('label', c.label, 'value', c.code) ORDER BY c.sort_order)
           FROM accounting.expense_category c)::TEXT AS options
   FROM accounting.invoice i WHERE i.id = $id::INT;

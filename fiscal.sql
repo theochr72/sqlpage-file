@@ -33,7 +33,7 @@ SET _year = COALESCE(NULLIF($year, ''), EXTRACT(YEAR FROM CURRENT_DATE)::TEXT);
 
 -- ── KPIs de l'année ──────────────────────────────────────────────────────────
 
-SELECT 'big_number' AS component, 4 AS columns;
+SELECT 'big_number' AS component, 5 AS columns;
 
 SELECT 'Total Expenses' AS title,
        COALESCE(to_char(SUM(i.total_amount), 'FM999G999D00'), '0') AS value,
@@ -61,6 +61,15 @@ SELECT 'Deductible' AS title,
   JOIN accounting.expense_category c ON c.code = i.category_code
  WHERE COALESCE(i.fiscal_year, EXTRACT(YEAR FROM i.issue_date)::INT) = $_year::INT
    AND c.deductible = TRUE
+   AND ($property IS NULL OR $property = '' OR i.property_id = $property::INT);
+
+SELECT 'Total TVA' AS title,
+       COALESCE(to_char(SUM(i.tva_amount), 'FM999G999D00'), '0') AS value,
+       'EUR' AS unit,
+       'receipt-tax' AS icon,
+       'purple' AS color
+  FROM accounting.invoice i
+ WHERE COALESCE(i.fiscal_year, EXTRACT(YEAR FROM i.issue_date)::INT) = $_year::INT
    AND ($property IS NULL OR $property = '' OR i.property_id = $property::INT);
 
 SELECT 'Uncategorized' AS title,

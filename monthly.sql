@@ -72,33 +72,23 @@ SELECT 'Depenses' AS title,
    AND ($property IS NULL OR $property = '' OR i.property_id = $property::INT);
 
 SELECT 'Solde net' AS title,
-       to_char(
-           COALESCE((SELECT SUM(rp.amount)
-                       FROM accounting.rent_payment rp
-                       JOIN accounting.lease l ON l.id = rp.lease_id
-                      WHERE rp.period_year = $_year::INT AND rp.period_month = $_month::INT
-                        AND ($property IS NULL OR $property = '' OR l.property_id = $property::INT)), 0)
-           - COALESCE((SELECT SUM(i.total_amount)
+       to_char(cf.rent - cf.expenses, 'FM999G999D00') AS value,
+       '€' AS unit, 'scale' AS icon,
+       'Loyers recus moins depenses (hors credit).' AS description,
+       CASE WHEN cf.rent - cf.expenses >= 0 THEN 'green' ELSE 'red' END AS color
+  FROM (
+      SELECT COALESCE((SELECT SUM(rp.amount)
+                         FROM accounting.rent_payment rp
+                         JOIN accounting.lease l ON l.id = rp.lease_id
+                        WHERE rp.period_year = $_year::INT AND rp.period_month = $_month::INT
+                          AND ($property IS NULL OR $property = '' OR l.property_id = $property::INT)), 0) AS rent,
+             COALESCE((SELECT SUM(i.total_amount)
                          FROM accounting.invoice i
                         WHERE EXTRACT(MONTH FROM i.issue_date) = $_month::INT
                           AND COALESCE(i.fiscal_year, EXTRACT(YEAR FROM i.issue_date)::INT) = $_year::INT
                           AND i.status = 'validated'
-                          AND ($property IS NULL OR $property = '' OR i.property_id = $property::INT)), 0),
-       'FM999G999D00') AS value,
-       '€' AS unit, 'scale' AS icon,
-       'Loyers recus moins depenses (hors credit).' AS description,
-       CASE WHEN COALESCE((SELECT SUM(rp.amount)
-                              FROM accounting.rent_payment rp
-                              JOIN accounting.lease l ON l.id = rp.lease_id
-                             WHERE rp.period_year = $_year::INT AND rp.period_month = $_month::INT
-                               AND ($property IS NULL OR $property = '' OR l.property_id = $property::INT)), 0)
-                - COALESCE((SELECT SUM(i.total_amount)
-                              FROM accounting.invoice i
-                             WHERE EXTRACT(MONTH FROM i.issue_date) = $_month::INT
-                               AND COALESCE(i.fiscal_year, EXTRACT(YEAR FROM i.issue_date)::INT) = $_year::INT
-                               AND i.status = 'validated'
-                               AND ($property IS NULL OR $property = '' OR i.property_id = $property::INT)), 0)
-                >= 0 THEN 'green' ELSE 'red' END AS color;
+                          AND ($property IS NULL OR $property = '' OR i.property_id = $property::INT)), 0) AS expenses
+  ) cf;
 
 -- ── Tableau par bien ────────────────────────────────────────────────────────
 
