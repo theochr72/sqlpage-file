@@ -46,16 +46,16 @@ SET _total = (
 
 SELECT 'breadcrumb' AS component;
 
-SELECT 'Dashboard' AS title, '/' AS link;
-SELECT 'Invoices' AS title, '/invoices.sql?status=pending_review' AS link;
-SELECT 'Review' AS title, TRUE AS active;
+SELECT 'Tableau de bord' AS title, '/' AS link;
+SELECT 'Factures' AS title, '/invoices.sql?status=pending_review' AS link;
+SELECT 'Verification' AS title, TRUE AS active;
 
 -- ── Save feedback ─────────────────────────────────────────────────────────
 
 SELECT 'alert' AS component,
        'circle-check' AS icon,
        'green' AS color,
-       'Changes saved successfully.' AS title,
+       'Modifications enregistrees.' AS title,
        TRUE AS dismissible
  WHERE $saved = '1';
 
@@ -63,7 +63,7 @@ SELECT 'alert' AS component,
 
 SELECT 'button' AS component, 'center' AS justify, 'sm' AS size;
 
-SELECT 'Previous' AS title,
+SELECT 'Precedent' AS title,
        'arrow-left' AS icon,
        'review.sql?id=' || $_prev AS link,
        CASE WHEN $_prev IS NULL THEN TRUE END AS disabled
@@ -74,7 +74,7 @@ SELECT $_pos || ' / ' || $_total AS title,
        TRUE AS disabled
  WHERE $_total::INT > 0;
 
-SELECT 'Next' AS title,
+SELECT 'Suivant' AS title,
        'arrow-right' AS icon_after,
        'review.sql?id=' || $_next AS link,
        CASE WHEN $_next IS NULL THEN TRUE END AS disabled
@@ -92,14 +92,14 @@ SET _reject_link = (
 
 SELECT 'button' AS component, 'end' AS justify, 'sm' AS size;
 
-SELECT 'Validate' AS title,
+SELECT 'Valider' AS title,
        'green' AS color,
        'circle-check' AS icon,
        $_validate_link AS link,
        'review-validate-btn' AS id
   FROM accounting.invoice WHERE id = $id::INT;
 
-SELECT 'Reject' AS title,
+SELECT 'Rejeter' AS title,
        'red' AS outline,
        'circle-x' AS icon,
        $_reject_link AS link,
@@ -127,24 +127,24 @@ SELECT '<iframe src="' || $_pdf_data_url || '" style="width:100%;height:80vh;bor
 
 -- Fallback si pas de PDF
 SELECT 'alert' AS component,
-       'No PDF available' AS title,
+       'PDF non disponible' AS title,
        'file-off' AS icon,
        'orange' AS color,
-       'The PDF file is not available on the server. Upload it or re-run invoice_insert.py with --uploads-dir.' AS description
+       'Le fichier PDF n''est pas disponible sur le serveur. Importez-le ou relancez invoice_insert.py avec --uploads-dir.' AS description
  WHERE $_pdf_data_url IS NULL;
 
 -- ── Duplicate detection warning ───────────────────────────────────────────
 
 SELECT 'alert' AS component,
-       'Potential duplicate' AS title,
+       'Doublon potentiel' AS title,
        'copy' AS icon,
        'orange' AS color,
-       'Another invoice from the same supplier with a similar amount ('
+       'Une autre facture du meme fournisseur avec un montant similaire ('
            || dup.invoice_number || ' — ' || dup.total_amount || ' ' || COALESCE(dup.currency, '€')
-           || ', dated ' || dup.issue_date::TEXT
-           || ') exists.' AS description,
+           || ', du ' || dup.issue_date::TEXT
+           || ') existe.' AS description,
        'invoice.sql?id=' || dup.id AS link,
-       'View duplicate' AS link_text,
+       'Voir le doublon' AS link_text,
        TRUE AS dismissible
   FROM accounting.invoice cur
   JOIN accounting.invoice dup
@@ -165,7 +165,7 @@ SELECT 'Total' AS title,
        'green' AS color
   FROM accounting.invoice i WHERE i.id = $id::INT;
 
-SELECT 'Confidence' AS title,
+SELECT 'Confiance' AS title,
        COALESCE(ROUND(i.overall_confidence * 100)::TEXT || '%', 'N/A') AS value,
        'target' AS icon,
        CASE WHEN i.overall_confidence >= 0.8 THEN 'green'
@@ -174,17 +174,17 @@ SELECT 'Confidence' AS title,
        ROUND(COALESCE(i.overall_confidence, 0) * 100)::INT AS progress_percent
   FROM accounting.invoice i WHERE i.id = $id::INT;
 
-SELECT 'Line Items' AS title,
+SELECT 'Lignes' AS title,
        (SELECT COUNT(*) FROM accounting.invoice_item
          WHERE invoice_number = i.invoice_number)::TEXT AS value,
        'list-numbers' AS icon,
        'cyan' AS color
   FROM accounting.invoice i WHERE i.id = $id::INT;
 
-SELECT 'Status' AS title,
-       CASE WHEN i.status = 'pending_review' THEN 'Pending'
-            WHEN i.status = 'validated' THEN 'Validated'
-            WHEN i.status = 'rejected' THEN 'Rejected'
+SELECT 'Statut' AS title,
+       CASE WHEN i.status = 'pending_review' THEN 'En attente'
+            WHEN i.status = 'validated' THEN 'Validee'
+            WHEN i.status = 'rejected' THEN 'Rejetee'
        END AS value,
        CASE WHEN i.status = 'validated' THEN 'circle-check'
             WHEN i.status = 'rejected' THEN 'circle-x'
@@ -199,85 +199,85 @@ SELECT 'Status' AS title,
 SELECT 'form' AS component,
        'POST' AS method,
        'save_review.sql' AS action,
-       'Save Changes' AS validate,
+       'Enregistrer' AS validate,
        'device-floppy' AS validate_icon,
        'green' AS validate_color,
-       'Reset' AS reset,
-       'Review & Edit' AS title,
+       'Reinitialiser' AS reset,
+       'Verification et edition' AS title,
        'review-form' AS id;
 
 SELECT 'hidden' AS type, 'id' AS name, $id AS value;
 
 -- Invoice header fields (with warning styling for low confidence)
 
-SELECT 'text' AS type, 'invoice_number' AS name, 'Invoice Number' AS label,
+SELECT 'text' AS type, 'invoice_number' AS name, 'Numero de facture' AS label,
        i.invoice_number AS value, TRUE AS required, 4 AS width,
-       CASE WHEN COALESCE(i.invoice_number_confidence, 0) < 0.5 THEN 'Low confidence' END AS description
+       CASE WHEN COALESCE(i.invoice_number_confidence, 0) < 0.5 THEN 'Confiance faible' END AS description
   FROM accounting.invoice i WHERE i.id = $id::INT;
 
-SELECT 'text' AS type, 'document_type' AS name, 'Document Type' AS label,
+SELECT 'text' AS type, 'document_type' AS name, 'Type de document' AS label,
        i.document_type AS value, 4 AS width,
-       CASE WHEN COALESCE(i.document_type_confidence, 0) < 0.5 THEN 'Low confidence' END AS description
+       CASE WHEN COALESCE(i.document_type_confidence, 0) < 0.5 THEN 'Confiance faible' END AS description
   FROM accounting.invoice i WHERE i.id = $id::INT;
 
-SELECT 'date' AS type, 'issue_date' AS name, 'Issue Date' AS label,
+SELECT 'date' AS type, 'issue_date' AS name, 'Date d''emission' AS label,
        i.issue_date::TEXT AS value, 4 AS width,
-       CASE WHEN COALESCE(i.issue_date_confidence, 0) < 0.5 THEN 'Low confidence' END AS description
+       CASE WHEN COALESCE(i.issue_date_confidence, 0) < 0.5 THEN 'Confiance faible' END AS description
   FROM accounting.invoice i WHERE i.id = $id::INT;
 
-SELECT 'date' AS type, 'due_date' AS name, 'Due Date' AS label,
+SELECT 'date' AS type, 'due_date' AS name, 'Date d''echeance' AS label,
        i.due_date::TEXT AS value, 4 AS width,
-       CASE WHEN COALESCE(i.due_date_confidence, 0) < 0.5 THEN 'Low confidence' END AS description
+       CASE WHEN COALESCE(i.due_date_confidence, 0) < 0.5 THEN 'Confiance faible' END AS description
   FROM accounting.invoice i WHERE i.id = $id::INT;
 
-SELECT 'text' AS type, 'supplier_name' AS name, 'Supplier Name' AS label,
+SELECT 'text' AS type, 'supplier_name' AS name, 'Nom du fournisseur' AS label,
        i.supplier_name AS value, 'building' AS prefix_icon, 4 AS width,
-       CASE WHEN COALESCE(i.supplier_name_confidence, 0) < 0.5 THEN 'Low confidence' END AS description
+       CASE WHEN COALESCE(i.supplier_name_confidence, 0) < 0.5 THEN 'Confiance faible' END AS description
   FROM accounting.invoice i WHERE i.id = $id::INT;
 
-SELECT 'text' AS type, 'supplier_vat_id' AS name, 'Supplier VAT ID' AS label,
+SELECT 'text' AS type, 'supplier_vat_id' AS name, 'N° TVA fournisseur' AS label,
        i.supplier_vat_id AS value, 4 AS width,
-       CASE WHEN COALESCE(i.supplier_vat_id_confidence, 0) < 0.5 THEN 'Low confidence' END AS description
+       CASE WHEN COALESCE(i.supplier_vat_id_confidence, 0) < 0.5 THEN 'Confiance faible' END AS description
   FROM accounting.invoice i WHERE i.id = $id::INT;
 
-SELECT 'textarea' AS type, 'supplier_address' AS name, 'Supplier Address' AS label,
+SELECT 'textarea' AS type, 'supplier_address' AS name, 'Adresse fournisseur' AS label,
        i.supplier_address AS value, 2 AS rows, 4 AS width,
-       CASE WHEN COALESCE(i.supplier_address_confidence, 0) < 0.5 THEN 'Low confidence' END AS description
+       CASE WHEN COALESCE(i.supplier_address_confidence, 0) < 0.5 THEN 'Confiance faible' END AS description
   FROM accounting.invoice i WHERE i.id = $id::INT;
 
-SELECT 'text' AS type, 'customer_name' AS name, 'Customer Name' AS label,
+SELECT 'text' AS type, 'customer_name' AS name, 'Nom du client' AS label,
        i.customer_name AS value, 'user' AS prefix_icon, 4 AS width,
-       CASE WHEN COALESCE(i.customer_name_confidence, 0) < 0.5 THEN 'Low confidence' END AS description
+       CASE WHEN COALESCE(i.customer_name_confidence, 0) < 0.5 THEN 'Confiance faible' END AS description
   FROM accounting.invoice i WHERE i.id = $id::INT;
 
-SELECT 'textarea' AS type, 'customer_address' AS name, 'Customer Address' AS label,
+SELECT 'textarea' AS type, 'customer_address' AS name, 'Adresse client' AS label,
        i.customer_address AS value, 2 AS rows, 4 AS width,
-       CASE WHEN COALESCE(i.customer_address_confidence, 0) < 0.5 THEN 'Low confidence' END AS description
+       CASE WHEN COALESCE(i.customer_address_confidence, 0) < 0.5 THEN 'Confiance faible' END AS description
   FROM accounting.invoice i WHERE i.id = $id::INT;
 
-SELECT 'number' AS type, 'total_amount' AS name, 'Total Amount (TTC)' AS label,
+SELECT 'number' AS type, 'total_amount' AS name, 'Montant total (TTC)' AS label,
        i.total_amount::TEXT AS value, 0.01 AS step, 4 AS width,
-       CASE WHEN COALESCE(i.total_amount_confidence, 0) < 0.5 THEN 'Low confidence' END AS description
+       CASE WHEN COALESCE(i.total_amount_confidence, 0) < 0.5 THEN 'Confiance faible' END AS description
   FROM accounting.invoice i WHERE i.id = $id::INT;
 
 SELECT 'number' AS type, 'total_ht' AS name, 'Total HT' AS label,
        i.total_ht::TEXT AS value, 0.01 AS step, 4 AS width
   FROM accounting.invoice i WHERE i.id = $id::INT;
 
-SELECT 'number' AS type, 'tva_amount' AS name, 'TVA Amount' AS label,
+SELECT 'number' AS type, 'tva_amount' AS name, 'Montant TVA' AS label,
        i.tva_amount::TEXT AS value, 0.01 AS step, 2 AS width
   FROM accounting.invoice i WHERE i.id = $id::INT;
 
-SELECT 'text' AS type, 'currency' AS name, 'Currency' AS label,
+SELECT 'text' AS type, 'currency' AS name, 'Devise' AS label,
        i.currency AS value, 2 AS width, 3 AS maxlength
   FROM accounting.invoice i WHERE i.id = $id::INT;
 
-SELECT 'select' AS type, 'status' AS name, 'Status' AS label,
+SELECT 'select' AS type, 'status' AS name, 'Statut' AS label,
        i.status AS value, 2 AS width,
-       '[{"label":"Pending Review","value":"pending_review"},{"label":"Validated","value":"validated"},{"label":"Rejected","value":"rejected"}]' AS options
+       '[{"label":"En attente","value":"pending_review"},{"label":"Validee","value":"validated"},{"label":"Rejetee","value":"rejected"}]' AS options
   FROM accounting.invoice i WHERE i.id = $id::INT;
 
--- ── LMNP fields (with auto-categorisation) ───────────────────────────────
+-- ── Champs LMNP (avec auto-categorisation) ──────────────────────────────
 
 SELECT 'divider' AS component, 'LMNP' AS contents;
 
@@ -301,33 +301,33 @@ SET _auto_category = (
      LIMIT 1
 );
 
-SELECT 'select' AS type, 'property_id' AS name, 'Property' AS label,
+SELECT 'select' AS type, 'property_id' AS name, 'Bien' AS label,
        COALESCE(i.property_id::TEXT, $_auto_property) AS value, 4 AS width, TRUE AS dropdown,
-       CASE WHEN i.property_id IS NULL AND $_auto_property IS NOT NULL THEN 'Auto-suggested from supplier' END AS description,
+       CASE WHEN i.property_id IS NULL AND $_auto_property IS NOT NULL THEN 'Suggestion automatique depuis le fournisseur' END AS description,
        (SELECT json_agg(json_build_object('label', p.name || COALESCE(' — ' || p.city, ''), 'value', p.id))
           FROM accounting.property p)::TEXT AS options
   FROM accounting.invoice i WHERE i.id = $id::INT;
 
-SELECT 'select' AS type, 'category_code' AS name, 'Expense Category' AS label,
+SELECT 'select' AS type, 'category_code' AS name, 'Categorie de depense' AS label,
        COALESCE(i.category_code, $_auto_category) AS value, 4 AS width, TRUE AS dropdown,
-       CASE WHEN i.category_code IS NULL AND $_auto_category IS NOT NULL THEN 'Auto-suggested from supplier' END AS description,
+       CASE WHEN i.category_code IS NULL AND $_auto_category IS NOT NULL THEN 'Suggestion automatique depuis le fournisseur' END AS description,
        (SELECT json_agg(json_build_object('label', c.label, 'value', c.code) ORDER BY c.sort_order)
           FROM accounting.expense_category c)::TEXT AS options
   FROM accounting.invoice i WHERE i.id = $id::INT;
 
-SELECT 'number' AS type, 'fiscal_year' AS name, 'Fiscal Year' AS label,
+SELECT 'number' AS type, 'fiscal_year' AS name, 'Annee fiscale' AS label,
        COALESCE(i.fiscal_year, EXTRACT(YEAR FROM i.issue_date))::TEXT AS value,
        1 AS step, 2 AS width
   FROM accounting.invoice i WHERE i.id = $id::INT;
 
 SELECT 'textarea' AS type, 'notes' AS name, 'Notes' AS label,
        i.notes AS value, 3 AS rows, 12 AS width,
-       'Internal notes, context, etc.' AS placeholder
+       'Notes internes, contexte, etc.' AS placeholder
   FROM accounting.invoice i WHERE i.id = $id::INT;
 
--- ── Line items (dynamic — handles any number) ────────────────────────────
+-- ── Lignes de facture (dynamique — gere n'importe quel nombre) ──────────
 
-SELECT 'divider' AS component, 'Line Items' AS contents;
+SELECT 'divider' AS component, 'Lignes de facture' AS contents;
 
 -- Item count for the POST handler
 SELECT 'hidden' AS type, 'item_count' AS name,
@@ -348,9 +348,9 @@ FROM (
         END AS type,
         f.field_type || '_' || it.item_index AS name,
         CASE f.field_type
-            WHEN 'desc'       THEN 'Item ' || it.item_index || ' — Description'
-            WHEN 'qty'        THEN 'Qty'
-            WHEN 'price'      THEN 'Unit Price'
+            WHEN 'desc'       THEN 'Ligne ' || it.item_index || ' — Description'
+            WHEN 'qty'        THEN 'Qte'
+            WHEN 'price'      THEN 'Prix unitaire'
             WHEN 'item_total' THEN 'Total'
             WHEN 'tva_rate'   THEN 'TVA %'
         END AS label,
@@ -376,7 +376,7 @@ FROM (
             WHEN 'tva_rate'   THEN 0.01
         END AS step,
         CASE WHEN f.field_type = 'desc' AND COALESCE(it.description_confidence, 0) < 0.5
-             THEN 'Low confidence' END AS description,
+             THEN 'Confiance faible' END AS description,
         NULL AS placeholder,
         it.item_index * 10 + f.ord AS sort_ord
     FROM accounting.invoice_item it
@@ -387,11 +387,11 @@ FROM (
 ) items
 ORDER BY sort_ord;
 
--- ── Navigation bottom ──────────────────────────────────────────────────────
+-- ── Navigation bas de page ───────────────────────────────────────────────
 
 SELECT 'button' AS component, 'center' AS justify, 'sm' AS size;
 
-SELECT 'Previous' AS title,
+SELECT 'Precedent' AS title,
        'arrow-left' AS icon,
        'review.sql?id=' || $_prev AS link,
        CASE WHEN $_prev IS NULL THEN TRUE END AS disabled
@@ -402,18 +402,18 @@ SELECT $_pos || ' / ' || $_total AS title,
        TRUE AS disabled
  WHERE $_total::INT > 0;
 
-SELECT 'Next' AS title,
+SELECT 'Suivant' AS title,
        'arrow-right' AS icon_after,
        'review.sql?id=' || $_next AS link,
        CASE WHEN $_next IS NULL THEN TRUE END AS disabled
  WHERE $_total::INT > 0;
 
--- ── Keyboard shortcuts legend ──────────────────────────────────────────────
+-- ── Légende raccourcis clavier ───────────────────────────────────────────
 
 SELECT 'text' AS component, TRUE AS center;
-SELECT '**Alt+V** Validate  |  **Alt+R** Reject  |  **Alt+S** Save  |  **Alt+←/→** Navigate' AS contents_md;
+SELECT '**Alt+V** Valider  |  **Alt+R** Rejeter  |  **Alt+S** Enregistrer  |  **Alt+←/→** Naviguer' AS contents_md;
 
--- ── Keyboard shortcuts (data attributes + static script) ─────────────────
+-- ── Raccourcis clavier (data attributes + script statique) ──────────────
 
 SELECT 'html' AS component;
 SELECT '<div id="review-shortcuts" style="display:none"'

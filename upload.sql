@@ -3,8 +3,8 @@
 SELECT 'dynamic' AS component, sqlpage.run_sql('shell.sql') AS properties;
 
 SELECT 'hero' AS component,
-       'Upload Invoices' AS title,
-       'Drop your PDF invoices here for AI-powered data extraction.' AS description;
+       'Import de factures' AS title,
+       'Deposez vos factures PDF ici pour une extraction automatique par IA.' AS description;
 
 -- ── Formulaire d'upload ──────────────────────────────────────────────────────
 
@@ -12,59 +12,59 @@ SELECT 'form' AS component,
        'upload_handler.sql' AS action,
        'POST' AS method,
        'multipart/form-data' AS enctype,
-       'Upload & Save' AS validate,
+       'Importer' AS validate,
        'upload' AS validate_icon,
        'azure' AS validate_color;
 
 SELECT 'file' AS type,
        'invoice_pdf' AS name,
-       'PDF Invoice' AS label,
-       'Select a PDF file to upload' AS placeholder,
+       'Facture PDF' AS label,
+       'Selectionnez un fichier PDF' AS placeholder,
        '.pdf' AS accept,
        TRUE AS required,
-       'Supported format: PDF' AS description;
+       'Format accepte : PDF' AS description;
 
 -- ── Steps: comment ça marche ─────────────────────────────────────────────────
 
 SELECT 'title' AS component,
-       'How it works' AS contents,
+       'Comment ca marche' AS contents,
        3 AS level;
 
 SELECT 'steps' AS component,
        'azure' AS color;
 
-SELECT 'Upload PDF' AS title,
-       'Drop your invoice PDF above' AS description,
+SELECT 'Import PDF' AS title,
+       'Deposez votre facture PDF ci-dessus' AS description,
        'upload' AS icon,
        TRUE AS active;
 
-SELECT 'AI Extraction' AS title,
-       'Run invoice_insert.py to extract data with AI' AS description,
+SELECT 'Extraction IA' AS title,
+       'Lancez invoice_insert.py pour extraire les donnees par IA' AS description,
        'brain' AS icon;
 
-SELECT 'Review' AS title,
-       'Check extracted data and confidence scores' AS description,
+SELECT 'Verification' AS title,
+       'Verifiez les donnees extraites et les scores de confiance' AS description,
        'eye-check' AS icon;
 
-SELECT 'Validate' AS title,
-       'Approve or reject the invoice' AS description,
+SELECT 'Validation' AS title,
+       'Approuvez ou rejetez la facture' AS description,
        'circle-check' AS icon;
 
 -- ── Historique des uploads ───────────────────────────────────────────────────
 
 SELECT 'title' AS component,
-       'Upload History' AS contents,
+       'Historique des imports' AS contents,
        3 AS level;
 
 SELECT 'table' AS component,
        TRUE AS sort,
        TRUE AS hover,
        TRUE AS striped_rows,
-       'No files uploaded yet.' AS empty_description;
+       'Aucun fichier importe pour le moment.' AS empty_description;
 
-SELECT filename AS "Filename",
-       to_char(uploaded_at, 'YYYY-MM-DD HH24:MI') AS "Uploaded",
-       CASE WHEN processed THEN 'Processed' ELSE 'Pending' END AS "Status",
+SELECT filename AS "Fichier",
+       to_char(uploaded_at, 'YYYY-MM-DD HH24:MI') AS "Date d''import",
+       CASE WHEN processed THEN 'Traite' ELSE 'En attente' END AS "Statut",
        CASE WHEN processed THEN 'green' ELSE 'orange' END AS _sqlpage_color
   FROM accounting.pending_upload
  ORDER BY uploaded_at DESC

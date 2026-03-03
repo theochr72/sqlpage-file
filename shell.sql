@@ -18,5 +18,5 @@ SELECT 'shell' AS component,
        json('{"link":"/recurring.sql", "title":"Charges recurrentes", "icon":"repeat"}') AS menu_item,
        json('{"link":"/invoices.sql", "title":"Factures", "icon":"file-invoice"}') AS menu_item,
        json('{"link":"/fiscal.sql", "title":"Fiscal", "icon":"receipt-tax"}') AS menu_item,
-       json('{"link":"/supplier_mappings.sql", "title":"Mappings", "icon":"arrows-right-left"}') AS menu_item,
+       json('{"link":"/supplier_mappings.sql", "title":"Correspondances", "icon":"arrows-right-left"}') AS menu_item,
        json('{"link":"/upload.sql", "title":"Import", "icon":"upload"}') AS menu_item;

@@ -31,5 +31,5 @@ SELECT 'status_code' AS component, 404 AS status
 
 SELECT 'html' AS component
  WHERE $_data_url IS NULL;
-SELECT '<p style="padding:1em;color:#666">PDF not available. Upload it or re-run invoice_insert.py with --uploads-dir.</p>' AS html
+SELECT '<p style="padding:1em;color:#666">PDF non disponible. Importez-le ou relancez invoice_insert.py avec --uploads-dir.</p>' AS html
  WHERE $_data_url IS NULL;

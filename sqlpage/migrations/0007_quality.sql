@@ -89,14 +89,14 @@ SELECT i.id,
        i.original_filename,
        i.renamed_filename,
        -- Joined fields
-       COALESCE(c.label, 'Uncategorized') AS category_label,
+       COALESCE(c.label, 'Non categorisee') AS category_label,
        COALESCE(c.deductible, FALSE) AS category_deductible,
-       COALESCE(p.name, 'Unassigned') AS property_name,
+       COALESCE(p.name, 'Non assigne') AS property_name,
        p.city AS property_city,
        -- Computed display fields
-       CASE WHEN i.status = 'pending_review' THEN 'Pending'
-            WHEN i.status = 'validated' THEN 'Validated'
-            WHEN i.status = 'rejected' THEN 'Rejected'
+       CASE WHEN i.status = 'pending_review' THEN 'En attente'
+            WHEN i.status = 'validated' THEN 'Validee'
+            WHEN i.status = 'rejected' THEN 'Rejetee'
        END AS status_label,
        CASE WHEN i.status = 'validated' THEN 'green'
             WHEN i.status = 'rejected' THEN 'red'

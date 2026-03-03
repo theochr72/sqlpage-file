@@ -31,7 +31,7 @@ SET _invoice_id = (
            re.property_id,
            re.category_code,
            $_cur_year::INT,
-           'Auto-generated from recurring template #' || re.id
+           'Generee automatiquement depuis le modele recurrent #' || re.id
       FROM accounting.recurring_expense re
      WHERE re.id = $id::INT AND re.active = TRUE
     RETURNING id

@@ -1,21 +1,21 @@
--- fiscal.sql — Récapitulatif fiscal LMNP par année et catégorie
+-- fiscal.sql — Recapitulatif fiscal LMNP par annee et categorie
 
 SELECT 'dynamic' AS component, sqlpage.run_sql('shell.sql') AS properties;
 
 SELECT 'hero' AS component,
-       'Fiscal Summary' AS title,
-       'LMNP expense overview by year, category, and property.' AS description;
+       'Recapitulatif fiscal' AS title,
+       'Vue d''ensemble des depenses LMNP par annee, categorie et bien.' AS description;
 
 -- ── Sélecteur d'année et bien ────────────────────────────────────────────────
 
 SELECT 'form' AS component,
        'GET' AS method,
        'fiscal.sql' AS action,
-       'Filter' AS validate,
+       'Filtrer' AS validate,
        'filter' AS validate_icon,
        'azure' AS validate_color;
 
-SELECT 'select' AS type, 'year' AS name, 'Fiscal Year' AS label,
+SELECT 'select' AS type, 'year' AS name, 'Annee fiscale' AS label,
        COALESCE($year, EXTRACT(YEAR FROM CURRENT_DATE)::TEXT) AS value,
        4 AS width, TRUE AS dropdown,
        (SELECT json_agg(json_build_object('label', y::TEXT, 'value', y::TEXT) ORDER BY y DESC)
@@ -23,7 +23,7 @@ SELECT 'select' AS type, 'year' AS name, 'Fiscal Year' AS label,
                   FROM accounting.invoice WHERE issue_date IS NOT NULL OR fiscal_year IS NOT NULL) sub
        )::TEXT AS options;
 
-SELECT 'select' AS type, 'property' AS name, 'Property' AS label,
+SELECT 'select' AS type, 'property' AS name, 'Bien' AS label,
        $property AS value, 4 AS width, TRUE AS dropdown, TRUE AS empty_option,
        (SELECT json_agg(json_build_object('label', p.name, 'value', p.id) ORDER BY p.name)
           FROM accounting.property p)::TEXT AS options;
@@ -35,7 +35,7 @@ SET _year = COALESCE(NULLIF($year, ''), EXTRACT(YEAR FROM CURRENT_DATE)::TEXT);
 
 SELECT 'big_number' AS component, 5 AS columns;
 
-SELECT 'Total Expenses' AS title,
+SELECT 'Total depenses' AS title,
        COALESCE(to_char(SUM(i.total_amount), 'FM999G999D00'), '0') AS value,
        'EUR' AS unit,
        'currency-euro' AS icon,
@@ -44,7 +44,7 @@ SELECT 'Total Expenses' AS title,
  WHERE COALESCE(i.fiscal_year, EXTRACT(YEAR FROM i.issue_date)::INT) = $_year::INT
    AND ($property IS NULL OR $property = '' OR i.property_id = $property::INT);
 
-SELECT 'Invoices' AS title,
+SELECT 'Factures' AS title,
        COUNT(*)::TEXT AS value,
        'file-invoice' AS icon,
        'azure' AS color
@@ -72,7 +72,7 @@ SELECT 'Total TVA' AS title,
  WHERE COALESCE(i.fiscal_year, EXTRACT(YEAR FROM i.issue_date)::INT) = $_year::INT
    AND ($property IS NULL OR $property = '' OR i.property_id = $property::INT);
 
-SELECT 'Uncategorized' AS title,
+SELECT 'Non categorisees' AS title,
        COUNT(*)::TEXT AS value,
        'alert-triangle' AS icon,
        CASE WHEN COUNT(*) > 0 THEN 'orange' ELSE 'green' END AS color
@@ -84,20 +84,20 @@ SELECT 'Uncategorized' AS title,
 -- ── Tableau par catégorie ────────────────────────────────────────────────────
 
 SELECT 'title' AS component,
-       'Expenses by Category — ' || $_year AS contents,
+       'Depenses par categorie — ' || $_year AS contents,
        3 AS level;
 
 SELECT 'table' AS component,
        TRUE AS sort,
-       'Amount,Invoices' AS align_right,
+       'Montant,Factures' AS align_right,
        TRUE AS hover,
        TRUE AS striped_rows,
-       'No categorized expenses for this year.' AS empty_description;
+       'Aucune depense categorisee pour cette annee.' AS empty_description;
 
-SELECT c.label AS "Category",
-       COUNT(i.id)::TEXT AS "Invoices",
-       COALESCE(to_char(SUM(i.total_amount), 'FM999G999D00'), '0') || ' EUR' AS "Amount",
-       CASE WHEN c.deductible THEN 'Yes' ELSE 'No' END AS "Deductible"
+SELECT c.label AS "Categorie",
+       COUNT(i.id)::TEXT AS "Factures",
+       COALESCE(to_char(SUM(i.total_amount), 'FM999G999D00'), '0') || ' EUR' AS "Montant",
+       CASE WHEN c.deductible THEN 'Oui' ELSE 'Non' END AS "Deductible"
   FROM accounting.expense_category c
   LEFT JOIN accounting.invoice i
     ON i.category_code = c.code
@@ -110,7 +110,7 @@ HAVING COUNT(i.id) > 0
 -- ── Chart: Répartition par catégorie (pie) ───────────────────────────────────
 
 SELECT 'chart' AS component,
-       'Expense Breakdown' AS title,
+       'Repartition des depenses' AS title,
        'pie' AS type,
        TRUE AS labels,
        350 AS height;
@@ -127,7 +127,7 @@ SELECT c.label AS x,
 -- ── Chart: Dépenses par mois (bar) ──────────────────────────────────────────
 
 SELECT 'chart' AS component,
-       'Monthly Expenses — ' || $_year AS title,
+       'Depenses mensuelles — ' || $_year AS title,
        'bar' AS type,
        TRUE AS labels,
        TRUE AS toolbar,
@@ -135,7 +135,7 @@ SELECT 'chart' AS component,
 
 SELECT to_char(i.issue_date, 'MM') AS x,
        ROUND(SUM(i.total_amount)::NUMERIC, 2) AS y,
-       'Expenses' AS series
+       'Depenses' AS series
   FROM accounting.invoice i
  WHERE COALESCE(i.fiscal_year, EXTRACT(YEAR FROM i.issue_date)::INT) = $_year::INT
    AND i.issue_date IS NOT NULL
@@ -146,22 +146,22 @@ SELECT to_char(i.issue_date, 'MM') AS x,
 -- ── Tableau par bien (si multi-biens) ────────────────────────────────────────
 
 SELECT 'title' AS component,
-       'Expenses by Property — ' || $_year AS contents,
+       'Depenses par bien — ' || $_year AS contents,
        3 AS level
  WHERE $property IS NULL OR $property = '';
 
 SELECT 'table' AS component,
        TRUE AS sort,
-       'Amount,Invoices' AS align_right,
+       'Montant,Factures' AS align_right,
        TRUE AS hover,
        TRUE AS striped_rows,
-       'No property-assigned expenses.' AS empty_description
+       'Aucune depense assignee a un bien.' AS empty_description
  WHERE $property IS NULL OR $property = '';
 
-SELECT p.name AS "Property",
-       p.city AS "City",
-       COUNT(i.id)::TEXT AS "Invoices",
-       COALESCE(to_char(SUM(i.total_amount), 'FM999G999D00'), '0') || ' EUR' AS "Amount"
+SELECT p.name AS "Bien",
+       p.city AS "Ville",
+       COUNT(i.id)::TEXT AS "Factures",
+       COALESCE(to_char(SUM(i.total_amount), 'FM999G999D00'), '0') || ' EUR' AS "Montant"
   FROM accounting.property p
   LEFT JOIN accounting.invoice i
     ON i.property_id = p.id
@@ -173,19 +173,19 @@ SELECT p.name AS "Property",
 -- ── Factures non catégorisées ────────────────────────────────────────────────
 
 SELECT 'title' AS component,
-       'Uncategorized Invoices' AS contents,
+       'Factures non categorisees' AS contents,
        3 AS level;
 
 SELECT 'table' AS component,
        TRUE AS sort,
        TRUE AS hover,
-       'Amount' AS align_right,
-       'All invoices are categorized!' AS empty_description;
+       'Montant' AS align_right,
+       'Toutes les factures sont categorisees !' AS empty_description;
 
-SELECT i.invoice_number AS "Invoice #",
-       i.supplier_name AS "Supplier",
+SELECT i.invoice_number AS "N° Facture",
+       i.supplier_name AS "Fournisseur",
        i.issue_date::TEXT AS "Date",
-       COALESCE(i.total_amount::TEXT || ' EUR', '') AS "Amount",
+       COALESCE(i.total_amount::TEXT || ' EUR', '') AS "Montant",
        'invoice.sql?id=' || i.id AS _sqlpage_id,
        'orange' AS _sqlpage_color
   FROM accounting.invoice i
@@ -198,7 +198,7 @@ SELECT i.invoice_number AS "Invoice #",
 
 SELECT 'button' AS component, 'center' AS justify;
 
-SELECT 'Export CSV' AS title,
+SELECT 'Exporter en CSV' AS title,
        'download' AS icon,
        'green' AS color,
        'fiscal_export.sql?year=' || $_year

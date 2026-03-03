@@ -19,17 +19,17 @@ SELECT 'dynamic' AS component, sqlpage.run_sql('shell.sql') AS properties
  WHERE $file_path IS NULL;
 
 SELECT 'alert' AS component,
-       'Upload failed' AS title,
+       'Echec de l''import' AS title,
        'alert-circle' AS icon,
        'red' AS color,
-       'The file could not be saved. Make sure you selected a valid PDF file.' AS description,
+       'Le fichier n''a pas pu etre enregistre. Verifiez que vous avez selectionne un fichier PDF valide.' AS description,
        TRUE AS important
  WHERE $file_path IS NULL;
 
 SELECT 'button' AS component, 'center' AS justify
  WHERE $file_path IS NULL;
 
-SELECT 'Try again' AS title,
+SELECT 'Reessayer' AS title,
        'upload' AS icon,
        'azure' AS color,
        '/upload.sql' AS link

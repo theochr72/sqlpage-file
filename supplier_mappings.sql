@@ -1,75 +1,75 @@
--- supplier_mappings.sql — CRUD for auto-categorization rules
+-- supplier_mappings.sql — Gestion des regles d'auto-categorisation
 
 SELECT 'dynamic' AS component, sqlpage.run_sql('shell.sql') AS properties;
 
 -- ── Breadcrumb ─────────────────────────────────────────────────────────────
 
 SELECT 'breadcrumb' AS component;
-SELECT 'Dashboard' AS title, '/' AS link;
-SELECT 'Supplier Mappings' AS title, TRUE AS active;
+SELECT 'Tableau de bord' AS title, '/' AS link;
+SELECT 'Correspondances fournisseurs' AS title, TRUE AS active;
 
--- ── Success/error feedback ─────────────────────────────────────────────────
+-- ── Retour succes/erreur ─────────────────────────────────────────────────
 
 SELECT 'alert' AS component,
        'circle-check' AS icon,
        'green' AS color,
-       'Mapping saved successfully.' AS title,
+       'Correspondance enregistree.' AS title,
        TRUE AS dismissible
  WHERE $saved = '1';
 
 SELECT 'alert' AS component,
        'trash' AS icon,
        'red' AS color,
-       'Mapping deleted.' AS title,
+       'Correspondance supprimee.' AS title,
        TRUE AS dismissible
  WHERE $deleted = '1';
 
 -- ── Description ────────────────────────────────────────────────────────────
 
 SELECT 'hero' AS component,
-       'Supplier Mappings' AS title,
-       'Define auto-categorization rules. When a supplier name matches a pattern, the property and category will be pre-filled on the review and edit pages.' AS description;
+       'Correspondances fournisseurs' AS title,
+       'Definissez des regles d''auto-categorisation. Quand le nom d''un fournisseur correspond a un motif, le bien et la categorie seront pre-remplis sur les pages de verification et d''edition.' AS description;
 
--- ── Existing mappings table ────────────────────────────────────────────────
+-- ── Tableau des correspondances existantes ───────────────────────────────
 
 SELECT 'table' AS component,
        TRUE AS sort,
        TRUE AS hover,
        TRUE AS striped_rows,
        TRUE AS search,
-       'No mappings defined yet. Add one below.' AS empty_description;
+       'Aucune correspondance definie. Ajoutez-en une ci-dessous.' AS empty_description;
 
-SELECT sm.supplier_pattern AS "Supplier Pattern",
-       COALESCE(c.label, '—') AS "Category",
-       COALESCE(p.name, '—') AS "Property",
-       to_char(sm.created_at, 'YYYY-MM-DD') AS "Created",
-       'delete_supplier_mapping.sql?id=' || sm.id AS "Delete[link]"
+SELECT sm.supplier_pattern AS "Motif fournisseur",
+       COALESCE(c.label, '—') AS "Categorie",
+       COALESCE(p.name, '—') AS "Bien",
+       to_char(sm.created_at, 'YYYY-MM-DD') AS "Cree le",
+       'delete_supplier_mapping.sql?id=' || sm.id AS "Supprimer[link]"
   FROM accounting.supplier_mapping sm
   LEFT JOIN accounting.expense_category c ON c.code = sm.category_code
   LEFT JOIN accounting.property p ON p.id = sm.property_id
  ORDER BY sm.supplier_pattern;
 
--- ── Add / Edit form ────────────────────────────────────────────────────────
+-- ── Formulaire d'ajout ───────────────────────────────────────────────────
 
-SELECT 'divider' AS component, 'Add New Mapping' AS contents, 3 AS size;
+SELECT 'divider' AS component, 'Ajouter une correspondance' AS contents, 3 AS size;
 
 SELECT 'form' AS component,
        'POST' AS method,
        'save_supplier_mapping.sql' AS action,
-       'Save Mapping' AS validate,
+       'Enregistrer' AS validate,
        'plus' AS validate_icon,
        'green' AS validate_color;
 
-SELECT 'text' AS type, 'supplier_pattern' AS name, 'Supplier Pattern' AS label,
+SELECT 'text' AS type, 'supplier_pattern' AS name, 'Motif fournisseur' AS label,
        TRUE AS required, 4 AS width,
-       'Part of the supplier name to match (case-insensitive). E.g. "leroy" matches "Leroy Merlin".' AS description;
+       'Partie du nom du fournisseur a reconnaitre (insensible a la casse). Ex: "leroy" correspond a "Leroy Merlin".' AS description;
 
-SELECT 'select' AS type, 'category_code' AS name, 'Expense Category' AS label,
+SELECT 'select' AS type, 'category_code' AS name, 'Categorie de depense' AS label,
        4 AS width, TRUE AS dropdown, TRUE AS empty_option,
        (SELECT json_agg(json_build_object('label', c.label, 'value', c.code) ORDER BY c.sort_order)
           FROM accounting.expense_category c)::TEXT AS options;
 
-SELECT 'select' AS type, 'property_id' AS name, 'Property' AS label,
+SELECT 'select' AS type, 'property_id' AS name, 'Bien' AS label,
        4 AS width, TRUE AS dropdown, TRUE AS empty_option,
        (SELECT json_agg(json_build_object('label', p.name || COALESCE(' — ' || p.city, ''), 'value', p.id))
           FROM accounting.property p)::TEXT AS options;
