@@ -97,14 +97,10 @@ SET _pdf_name = (SELECT COALESCE(renamed_filename, original_filename) FROM accou
 SET _pdf_path = 'uploads/' || $_pdf_name;
 SET _pdf_data_url = sqlpage.read_file_as_data_url($_pdf_path);
 
-SELECT 'card' AS component, 1 AS columns;
-
-SELECT i.supplier_name || ' — ' || i.invoice_number AS title,
-       $_pdf_data_url AS embed,
-       'iframe' AS embed_mode,
-       'file-text' AS icon
-  FROM accounting.invoice i
- WHERE i.id = $id::INT AND $_pdf_data_url IS NOT NULL;
+SELECT 'html' AS component
+ WHERE $_pdf_data_url IS NOT NULL;
+SELECT '<iframe src="' || $_pdf_data_url || '" style="width:100%;height:80vh;border:1px solid #dee2e6;border-radius:.375rem" allowfullscreen></iframe>' AS html
+ WHERE $_pdf_data_url IS NOT NULL;
 
 -- Fallback si pas de PDF
 SELECT 'alert' AS component,
