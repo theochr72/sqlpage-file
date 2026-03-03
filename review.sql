@@ -93,23 +93,26 @@ SELECT 'Detail' AS title,
 
 -- ── PDF embed ──────────────────────────────────────────────────────────────
 
+SET _pdf_name = (SELECT COALESCE(renamed_filename, original_filename) FROM accounting.invoice WHERE id = $id::INT);
+SET _pdf_path = 'uploads/' || $_pdf_name;
+SET _pdf_data_url = sqlpage.read_file_as_data_url($_pdf_path);
+
 SELECT 'card' AS component, 1 AS columns;
 
 SELECT i.supplier_name || ' — ' || i.invoice_number AS title,
-       'serve_pdf.sql?id=' || $id AS embed,
+       $_pdf_data_url AS embed,
        'iframe' AS embed_mode,
        'file-text' AS icon
   FROM accounting.invoice i
- WHERE i.id = $id::INT AND i.renamed_filename IS NOT NULL;
+ WHERE i.id = $id::INT AND $_pdf_data_url IS NOT NULL;
 
 -- Fallback si pas de PDF
 SELECT 'alert' AS component,
        'No PDF available' AS title,
        'file-off' AS icon,
        'orange' AS color,
-       'The original PDF file was not found for this invoice.' AS description
-  FROM accounting.invoice i
- WHERE i.id = $id::INT AND i.renamed_filename IS NULL;
+       'PDF introuvable : uploads/' || COALESCE($_pdf_name, '(aucun fichier)') AS description
+ WHERE $_pdf_data_url IS NULL;
 
 -- ── KPIs ───────────────────────────────────────────────────────────────────
 

@@ -10,6 +10,7 @@ import glob as glob_module
 import json
 import logging
 import re
+import shutil
 import subprocess
 import sys
 import unicodedata
@@ -149,7 +150,7 @@ def rename_pdf(pdf_path: Path, issue_date_str: str | None,
             counter += 1
 
     if new_path != pdf_path:
-        pdf_path.rename(new_path)
+        shutil.move(str(pdf_path), str(new_path))
         logger.info("Renamed %s -> %s", pdf_path.name, new_path)
     else:
         logger.info("File already has target name: %s", new_name)
