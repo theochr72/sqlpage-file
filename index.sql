@@ -89,7 +89,7 @@ SELECT 'big_number' AS component, 4 AS columns;
 
 SELECT 'A verifier' AS title,
        COUNT(*)::TEXT AS value,
-       'Factures en attente de review' AS description,
+       'Factures en attente de verification' AS description,
        'clock' AS icon,
        CASE WHEN COUNT(*) > 0 THEN 'orange' ELSE 'green' END AS color,
        'invoices.sql?status=pending_review' AS value_link
